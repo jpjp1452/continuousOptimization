@@ -6,6 +6,7 @@ from sklearn.metrics import mean_squared_error
 from sklearn.linear_model import Lasso
 from sklearn.datasets import fetch_california_housing
 from data_preprocessing import *
+import matplotlib.pyplot as plt
 
 
 
@@ -183,7 +184,6 @@ print("MSE ISTA first value:", mse_Per_iter_ista[0])
 print("MSE FISTA first value:", mse_Per_iter_fista[0])
 print("MSE GD first value:", mse_Per_iter_gd[0])
 
-import matplotlib.pyplot as plt
 plt.figure(figsize=(12, 6))
 plt.plot(range(1, len(mse_Per_iter_gd) + 1),mse_Per_iter_gd, label="Subgradient Descent")
 plt.plot( range(1, len(mse_Per_iter_ista) + 1),mse_Per_iter_ista, label="ISTA")
