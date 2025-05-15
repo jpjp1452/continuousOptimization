@@ -28,7 +28,7 @@ def load_and_preprocess_data(csv_path="housing.csv",targetColumn = 'median_house
         A, b, test_size=test_size, random_state=random_state
     )
 
-    return A_train, A_test, b_train, b_test, b_mean, b_std
+    return A_train,b_train,b_mean, b_std
 
 
 

@@ -26,11 +26,9 @@ A_train, A_test, b_train, b_test = train_test_split(A, b, test_size=0.2, random_
 
 
 
-A_train, A_test, b_train, b_test, b_mean, b_std=load_and_preprocess_Insurance_data()
-
-
-
-
+#A_train,b_train,b_mean, b_std=load_and_preprocess_Insurance_data(test_size=0.8, random_state=42)
+A_train, b_train, b_mean, b_std = load_and_preprocess_Housing_data(test_size=0.8, random_state=42)
+# A_train, b_train, b_mean, b_std = load_and_preprocess_Student_Performance_data(test_size=0.8, random_state=42)
 
 
 
@@ -38,51 +36,44 @@ LASSO=0
 ELASTICNET=1
 def gradientCurrying(A, b):
     def g_grad(w):
-        return A.T @ (A @ w - b)
+        return 2*(A.T @ (A @ w - b))
     return g_grad
+
+
+
+
 def soft_thresholding(x, lam):
     return np.sign(x) * np.maximum(np.abs(x) - lam, 0.0)
-    
 
-def ISTA(A, b, lam1=0.1, MODE=LASSO, lam2=0.01, max_iter=50000, tol=1e-16, adaptive_step=False):
-    if(MODE != LASSO and MODE != ELASTICNET):
-        raise ValueError("MODE must be either LASSO or ELASTICNET")
-    if(max_iter <= 0):
-        raise ValueError("max_iter must be positive")
-    grad = gradientCurrying(A, b)
-    
+
+
+def ISTA(A, b, ObjectiveFunction, lambdaValue,max_iter,tol=1e-8, adaptive_step=False):
     
     n = A.shape[1]
     x_i = np.zeros(n)
-    L = np.linalg.norm(A.T @ A, 2)
+    L = np.linalg.norm(A.T @ A, 2) * 2
     t = 1.0 / L
-    
+    grad = gradientCurrying(A, b)
     logs =[x_i]
     for k in range(max_iter):
         x_i_old = x_i.copy()
         
-        if(MODE==LASSO):
-            # Gradient step
-            x_i = x_i - t * grad(x_i)
-            # Proximal operator (soft-thresholding)
-            x_i = soft_thresholding(x_i, lam1*t)
-
-        else:
-            # Gradient step
-            x_i = x_i - t * (grad(x_i) + 2 * lam2 * x_i)
-            # Proximal operator (soft-thresholding)
-            x_i = soft_thresholding(x_i, lam1*t)
-
+        # Gradient step
+        x_i = x_i - t * grad(x_i)
         
+        # Proximal operator (soft-thresholding)
+        x_i = soft_thresholding(x_i, lambdaValue * t)
+
         if(adaptive_step):
             # update step
             Lk = np.linalg.norm(grad(x_i) - grad(x_i_old), 2) / np.linalg.norm(x_i - x_i_old, 2)
-            if Lk > L / 2:
+            if Lk > L / 2:  
                 L = Lk
                 t = 1.0 / L
+        
         logs.append(x_i)
         #stop criterion 
-        if np.linalg.norm(x_i - x_i_old) < tol:
+        if np.abs(ObjectiveFunction(x_i) - ObjectiveFunction(x_i_old)) < tol:
             break
         
     return x_i,logs
@@ -94,7 +85,8 @@ def ISTA(A, b, lam1=0.1, MODE=LASSO, lam2=0.01, max_iter=50000, tol=1e-16, adapt
 
 
 
-def fista(A, b, lam1=0.1, MODE=LASSO, lam2=0.01, max_iter=50000, tol=1e-16):
+
+def fista(A, b,ObjectiveFunction,lam1=0.1, MODE=LASSO, lam2=0.01, max_iter=50000, tol=1e-8):
     if(MODE != LASSO and MODE != ELASTICNET):
         raise ValueError("MODE must be either LASSO or ELASTICNET")
     if(max_iter <= 0):
@@ -104,6 +96,8 @@ def fista(A, b, lam1=0.1, MODE=LASSO, lam2=0.01, max_iter=50000, tol=1e-16):
     x_i = np.zeros(n)
     y = x_i.copy()
     t = 1
+    L = np.linalg.norm(A_train.T @ A_train, 2) * 2
+    
 
     grad = gradientCurrying(A, b)
     logs =[x_i]
@@ -120,69 +114,86 @@ def fista(A, b, lam1=0.1, MODE=LASSO, lam2=0.01, max_iter=50000, tol=1e-16):
 
         logs.append(x_i)
         #stop criterion 
-        if np.linalg.norm(x_i - x_old) < tol:
+        if np.abs(ObjectiveFunction(x_i) - ObjectiveFunction(x_old)) < tol:
             break
     return x_i,logs
 
 
+def subgradient_descent(A, b,ObjectiveFunction, lam=1e-5, max_iter=10000, tol=1e-8):
+    # gradient de ||Ax - b||^2
+    def grad(x):
+        return 2 * (A.T @ (A @ x - b))
 
-def gradient_descent(A, b,lam=0.00001, max_iter=10000, tol=1e-16):
     n = A.shape[1]
     x_i = np.zeros(n)
-    grad = gradientCurrying(A, b)
     
+    #eta0 = 0.001
+    # calcul Lipschitz
+    L = np.linalg.norm(A, ord=2)**2
+    eta0 = 1.0 / L
+
     logs = [x_i.copy()]
-    for k in range(max_iter):
+    for k in range(1, max_iter+1):
         x_old = x_i.copy()
-        
-        # gradient step
-        x_i = x_i - lam * grad(x_i)
-        
+
+        # sous-gradient du terme ℓ₁
+        z = np.sign(x_i)
+        zeros = (x_i == 0)
+        z[zeros] = np.random.uniform(-1, 1, size=zeros.sum())
+
+        # pas décroissant
+        eta_k = eta0 / (k**0.75)
+
+        # mise à jour
+        x_i = x_i - eta_k * (grad(x_i) + lam * z)
+
         logs.append(x_i.copy())
-        #stop criterion 
-        if np.linalg.norm(x_i - x_old) < tol:
+        if np.abs(ObjectiveFunction(x_i) - ObjectiveFunction(x_old)) < tol:
             break
 
-    return x_i,logs
+    return x_i, logs
+
+
 
 
 # Initialization
 x0 = np.zeros(A_train.shape[1])
-L = np.linalg.norm(A_train.T @ A_train, 2)
-t = 1.0 / L  
-lam1 = 0.1
+max_iter = 10000
+tolerance = 1e-16
+lam1 = 0.001
 lam2 = 0.01
 CURRENT_MODE = LASSO # Choose between LASSO et ELASTICNET
 
+objectiveFunction = lambda x: mean_squared_error(b_train, A_train @ x) + lam1 * np.linalg.norm(x, 1)
+
+
 # Exécution ISTA
-x_hat_ista, logs_ista = ISTA(A_train, b_train, lam1=lam1, MODE=CURRENT_MODE, lam2=lam2, max_iter=10000, tol=1e-16)
-x_hat_fista, logs_fista = fista(A_train, b_train, lam1=lam1, MODE=CURRENT_MODE, lam2=lam2, max_iter=10000, tol=1e-16)
-x_hat_gd, logs_gd = gradient_descent(A_train, b_train, max_iter=10000, tol=1e-16)
+x_hat_ista, logs_ista = ISTA(A_train, b_train,objectiveFunction, lam1, max_iter,tolerance, adaptive_step=False)
+x_hat_fista, logs_fista = fista(A_train, b_train,objectiveFunction, lam1=lam1, MODE=CURRENT_MODE, lam2=lam2, max_iter=10000, tol=1e-16)
+x_hat_gd, logs_gd = subgradient_descent(A_train, b_train,objectiveFunction, lam=lam1, max_iter=10000, tol=1e-16)
 
 
+mse_Per_iter_ista = [objectiveFunction(x) for x in logs_ista]
+mse_Per_iter_fista = [objectiveFunction(x) for x in logs_fista]
+mse_Per_iter_gd = [objectiveFunction(x) for x in logs_gd]
 
-def mse(A, b):
-    def f(x):
-        return mean_squared_error(b, A @ x)
-    
-    return f
 
-mseMapFunc = mse(A_train, b_train)
-
-mse_Per_iter_ista = [mseMapFunc(x) for x in logs_ista]
-mse_Per_iter_fista = [mseMapFunc(x) for x in logs_fista]
-mse_Per_iter_gd = [mseMapFunc(x) for x in logs_gd]
+#print first value of each list
+print("MSE ISTA first value:", mse_Per_iter_ista[0])
+print("MSE FISTA first value:", mse_Per_iter_fista[0])
+print("MSE GD first value:", mse_Per_iter_gd[0])
 
 import matplotlib.pyplot as plt
 plt.figure(figsize=(12, 6))
-plt.plot(mse_Per_iter_ista, label="ISTA")
-plt.plot(mse_Per_iter_fista, label="FISTA")
-plt.plot(mse_Per_iter_gd, label="GD")
+plt.plot(range(1, len(mse_Per_iter_gd) + 1),mse_Per_iter_gd, label="Subgradient Descent")
+plt.plot( range(1, len(mse_Per_iter_ista) + 1),mse_Per_iter_ista, label="ISTA")
+plt.plot( range(1, len(mse_Per_iter_fista) + 1),mse_Per_iter_fista, label="FISTA")
 plt.legend()
 plt.title("MSE vs Iterations")
 plt.xlabel("Iterations")
 plt.ylabel("MSE")
-plt.yscale("log")  # Set y-axis to logarithmic scale
+plt.yscale('log')
+plt.xscale('log')
 plt.grid()
 plt.show()
 
@@ -190,78 +201,38 @@ plt.show()
 
 
 # Évaluation
-y_pred = A_train @ x_hat_ista
-mse_test = mean_squared_error(b_train, y_pred)
-print("==> Résultats de l'ISTA")
-print(f"MSE : {mse_test:.4f}")
+mse_test_ista = objectiveFunction(x_hat_ista)
+print("==> Results ofISTA")
+print(f"MSE : {mse_test_ista:.4f}")
 
-y_pred_fista = A_train @ x_hat_fista
-mse_test_fista = mean_squared_error(b_train, y_pred_fista)
-print("==> Résultats du FISTA" )
+mse_test_fista = objectiveFunction(x_hat_fista)
+print("==> Results of FISTA" )
 print(f"MSE : {mse_test_fista:.4f}")
+
+
+mse_subgradient = objectiveFunction(x_hat_gd)
+print("==> Results of Subgradient Descent")
+print(f"MSE : {mse_subgradient:.4f}")
 
 
 # Lasso sklearn : alpha = lam / n_samples
 alpha = lam1 / A_train.shape[0]
-
-model = Lasso(alpha=alpha, fit_intercept=False, max_iter=100000)
+model = Lasso(alpha=alpha, fit_intercept=False, max_iter=max_iter )
 model.fit(A_train, b_train)
 
 # Comparaison des résultats
-y_pred_sklearn = model.predict(A_train)
-mse_sklearn = mean_squared_error(b_train, y_pred_sklearn)
+mse_sklearn = objectiveFunction(model.coef_)
 
-print("==> Résultats de comparaison")
+
+
+print("==> Results comparison")
 print(f"MSE sklearn : {mse_sklearn:.4f}")
-print(f"MSE ISTA : {mse_test:.4f}")
+print(f"MSE ISTA : {mse_test_ista:.4f}")
 print(f"MSE FISTA : {mse_test_fista:.4f}")
-print(f"Différence ISTA vs sklearn : {mse_test - mse_sklearn}")
-print(f"Différence FISTA vs sklearn : {mse_test_fista - mse_sklearn}")
-print(f"Différence ISTA vs FISTA : {mse_test - mse_test_fista}")
-print(f"Différence nb itérations ISTA vs FISTA : {len(logs_ista) - len(logs_fista)}")
+print(f"Difference ISTA vs sklearn : {mse_test_ista - mse_sklearn}")
+print(f"Difference FISTA vs sklearn : {mse_test_fista - mse_sklearn}")
+print(f"Difference ISTA vs Subgradient : {mse_test_ista - mse_subgradient}")
+print(f"Difference ISTA vs FISTA : {mse_test_ista - mse_test_fista}")
+print(f"Difference nb itérations ISTA vs FISTA : {len(logs_ista) - len(logs_fista)}")
 
-
-
-
-
-
-print("-------------Non normalized value-------")
-# Prédictions ISTA
-y_pred = A_train @ x_hat_ista
-y_pred_original = y_pred * b_std + b_mean
-b_train_original = b_train * b_std + b_mean
-mse_test = mean_squared_error(b_train_original, y_pred_original)
-rmse_test = np.sqrt(mse_test)
-print("==> Résultats de l'ISTA")
-print(f"MSE : {mse_test:.2f}")
-print(f"RMSE : {rmse_test:.2f}")
-
-# Prédictions FISTA
-y_pred_fista = A_train @ x_hat_fista
-y_pred_fista_original = y_pred_fista * b_std + b_mean
-mse_test_fista = mean_squared_error(b_train_original, y_pred_fista_original)
-rmse_test_fista = np.sqrt(mse_test_fista)
-print("==> Résultats du FISTA" )
-print(f"MSE : {mse_test_fista:.2f}")
-print(f"RMSE : {rmse_test_fista:.2f}")
-
-# Sklearn Lasso
-alpha = lam1 / A_train.shape[0]
-model = Lasso(alpha=alpha, fit_intercept=False, max_iter=100000)
-model.fit(A_train, b_train)
-y_pred_sklearn = model.predict(A_train)
-y_pred_sklearn_original = y_pred_sklearn * b_std + b_mean
-mse_sklearn = mean_squared_error(b_train_original, y_pred_sklearn_original)
-rmse_sklearn = np.sqrt(mse_sklearn)
-
-# Comparaison
-print("==> Résultats de comparaison")
-print(f"MSE sklearn : {mse_sklearn:.2f}")
-print(f"RMSE sklearn : {rmse_sklearn:.2f}")
-print(f"MSE ISTA : {mse_test:.2f}")
-print(f"MSE FISTA : {mse_test_fista:.2f}")
-print(f"Différence ISTA vs sklearn : {mse_test - mse_sklearn:.2f}")
-print(f"Différence FISTA vs sklearn : {mse_test_fista - mse_sklearn:.2f}")
-print(f"Différence ISTA vs FISTA : {mse_test - mse_test_fista:.2f}")
-print(f"Différence nb itérations ISTA vs FISTA : {len(logs_ista) - len(logs_fista)}")
 
