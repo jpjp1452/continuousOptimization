@@ -100,12 +100,52 @@ def fista(A, b,ObjectiveFunction,lam1=0.1, MODE=LASSO, lam2=0.01, max_iter=50000
     L = np.linalg.norm(A_train.T @ A_train, 2) * 2
     
 
+
+    def f(x):
+        # ½||Ax - b||²
+        r = A @ x - b
+        return np.dot(r, r)
+
+
+    def F(x):
+        # objectif complet
+        return f(x) + lam1 * np.linalg.norm(x, 1)
+
+
     grad = gradientCurrying(A, b)
     logs =[x_i]
     for k in range(max_iter):
         x_old = x_i.copy()
         if(MODE==LASSO):
-            x_i = soft_thresholding(y - (1/L) * (grad(y)), lam1/L)
+            eta = 0.9
+            # backtracking pour ce pas
+            Lbar = L
+            while True:
+                grad_y = grad(y)
+                # étape de gradient proximal (soft-thresholding)
+                z = soft_thresholding(y - grad_y / Lbar, lam1 / Lbar)
+
+                Fz = F(z)
+                # Q_L(z,y)
+                Qz = ( f(y)
+                    + np.dot((z - y), grad_y)
+                    + Lbar * np.linalg.norm(z - y)**2
+                    + lam1 * np.linalg.norm(z, 1) )
+                print("hello")
+                if Fz <= Qz:
+                    break
+                Lbar *= eta
+
+            x_i = soft_thresholding(y - 1/(Lbar) * (grad(y)), lam1/(Lbar))
+
+
+
+
+
+
+
+
+            print("(1/L)",(L),"t",t)
         else:
             x_i = soft_thresholding(y - (1/L) * (grad(y)+2 * lam2 *y), lam1/L)
             
@@ -159,8 +199,8 @@ def subgradient_descent(A, b,ObjectiveFunction, lam=1e-5, max_iter=10000, tol=1e
 
 # Initialization
 x0 = np.zeros(A_train.shape[1])
-max_iter = 10000
-tolerance = 1e-16
+max_iter = 1000
+tolerance = 1e-8
 lam1 = 0.001
 lam2 = 0.01
 CURRENT_MODE = LASSO # Choose between LASSO et ELASTICNET
@@ -170,8 +210,8 @@ objectiveFunction = lambda x: mean_squared_error(b_train, A_train @ x) + lam1 * 
 
 # Exécution ISTA
 x_hat_ista, logs_ista = ISTA(A_train, b_train,objectiveFunction, lam1, max_iter,tolerance, adaptive_step=False)
-x_hat_fista, logs_fista = fista(A_train, b_train,objectiveFunction, lam1=lam1, MODE=CURRENT_MODE, lam2=lam2, max_iter=10000, tol=1e-16)
-x_hat_gd, logs_gd = subgradient_descent(A_train, b_train,objectiveFunction, lam=lam1, max_iter=10000, tol=1e-16)
+x_hat_fista, logs_fista = fista(A_train, b_train,objectiveFunction, lam1=lam1, MODE=CURRENT_MODE, lam2=lam2, max_iter=max_iter, tol=tolerance)
+x_hat_gd, logs_gd = subgradient_descent(A_train, b_train,objectiveFunction, lam=lam1, max_iter=max_iter, tol=tolerance)
 
 
 mse_Per_iter_ista = [objectiveFunction(x) for x in logs_ista]
@@ -196,6 +236,7 @@ plt.yscale('log')
 plt.xscale('log')
 plt.grid()
 plt.show()
+plt.savefig("i.png")
 
 
 
