@@ -3,7 +3,7 @@ import pandas as pd
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error
-from sklearn.linear_model import Lasso
+from sklearn.linear_model import Lasso,Ridge,ElasticNet
 from sklearn.datasets import fetch_california_housing
 from data_preprocessing import *
 import matplotlib.pyplot as plt
@@ -34,7 +34,8 @@ A_train, b_train, b_mean, b_std = load_and_preprocess_Housing_data(test_size=0.8
 
 
 LASSO=0
-ELASTICNET=1
+RIDGE=1
+ELASTICNET=2
 def gradientCurrying(A, b):
     def g_grad(w):
         return 2*(A.T @ (A @ w - b))
@@ -48,7 +49,9 @@ def soft_thresholding(x, lam):
 
 
 
-def ISTA(A, b, ObjectiveFunction, lambdaValue,max_iter,tol=1e-8, adaptive_step=False):
+def ISTA(A, b, ObjectiveFunction,MODE,lam1,lam2,max_iter,tol=1e-8, adaptive_step=False):
+    if(MODE != LASSO and MODE != ELASTICNET and MODE != RIDGE):
+        raise ValueError("MODE must be either LASSO or ELASTICNET")
     
     n = A.shape[1]
     x_i = np.zeros(n)
@@ -61,9 +64,17 @@ def ISTA(A, b, ObjectiveFunction, lambdaValue,max_iter,tol=1e-8, adaptive_step=F
         
         # Gradient step
         x_i = x_i - t * grad(x_i)
-        
-        # Proximal operator (soft-thresholding)
-        x_i = soft_thresholding(x_i, lambdaValue * t)
+
+
+        if(MODE==LASSO):
+            # Soft-thresholding
+            x_i = soft_thresholding(x_i, lam1 * t)
+        elif(MODE==RIDGE):
+            # Ridge regression
+            x_i = x_i - t * (grad(x_i) + 2 * lam2 * x_i)
+        else:
+            # ElasticNet
+            x_i = soft_thresholding(x_i - t * (grad(x_i) + 2 * lam2 * x_i), lam1 * t)
 
         if(adaptive_step):
             # update step
@@ -88,7 +99,7 @@ def ISTA(A, b, ObjectiveFunction, lambdaValue,max_iter,tol=1e-8, adaptive_step=F
 
 
 def fista(A, b,ObjectiveFunction,lam1=0.1, MODE=LASSO, lam2=0.01, max_iter=50000, tol=1e-8):
-    if(MODE != LASSO and MODE != ELASTICNET):
+    if(MODE != LASSO and MODE != ELASTICNET and MODE != RIDGE):
         raise ValueError("MODE must be either LASSO or ELASTICNET")
     if(max_iter <= 0):
         raise ValueError("max_iter must be positive")
@@ -117,6 +128,7 @@ def fista(A, b,ObjectiveFunction,lam1=0.1, MODE=LASSO, lam2=0.01, max_iter=50000
     for k in range(max_iter):
         x_old = x_i.copy()
         if(MODE==LASSO):
+            """
             eta = 0.9
             # backtracking pour ce pas
             Lbar = L
@@ -135,17 +147,10 @@ def fista(A, b,ObjectiveFunction,lam1=0.1, MODE=LASSO, lam2=0.01, max_iter=50000
                 if Fz <= Qz:
                     break
                 Lbar *= eta
-
-            x_i = soft_thresholding(y - 1/(Lbar) * (grad(y)), lam1/(Lbar))
-
-
-
-
-
-
-
-
-            print("(1/L)",(L),"t",t)
+            """
+            x_i = soft_thresholding(y - 1/(L) * (grad(y)), lam1/(L))
+        elif(MODE==RIDGE):
+            x_i = y - 1/(L) * (grad(y)+2 * lam2 *y)
         else:
             x_i = soft_thresholding(y - (1/L) * (grad(y)+2 * lam2 *y), lam1/L)
             
@@ -203,13 +208,23 @@ max_iter = 1000
 tolerance = 1e-8
 lam1 = 0.001
 lam2 = 0.01
-CURRENT_MODE = LASSO # Choose between LASSO et ELASTICNET
+CURRENT_MODE = ELASTICNET # Choose between LASSO et ELASTICNET
 
-objectiveFunction = lambda x: mean_squared_error(b_train, A_train @ x) + lam1 * np.linalg.norm(x, 1)
+
+if CURRENT_MODE == LASSO:
+    # LASSO  ||Ax - b||² + λ||x||₁
+    objectiveFunction = lambda x: mean_squared_error(b_train, A_train @ x) + lam1 * np.linalg.norm(x, 1)
+elif CURRENT_MODE == RIDGE:
+    # RIDGE  ||Ax - b||² + λ||x||₂²
+    objectiveFunction = lambda x: mean_squared_error(b_train, A_train @ x) + lam2 * np.linalg.norm(x, 2)**2
+elif CURRENT_MODE == ELASTICNET:
+    # ELASTICNET ||Ax - b||² + λ₁||x||₁ + λ₂||x||₂²
+    objectiveFunction = lambda x: mean_squared_error(b_train, A_train @ x) + lam1 * np.linalg.norm(x, 1) + lam2 * np.linalg.norm(x, 2)**2
+
 
 
 # Exécution ISTA
-x_hat_ista, logs_ista = ISTA(A_train, b_train,objectiveFunction, lam1, max_iter,tolerance, adaptive_step=False)
+x_hat_ista, logs_ista = ISTA(A_train, b_train,objectiveFunction,CURRENT_MODE ,lam1,lam2, max_iter,tolerance, adaptive_step=False)
 x_hat_fista, logs_fista = fista(A_train, b_train,objectiveFunction, lam1=lam1, MODE=CURRENT_MODE, lam2=lam2, max_iter=max_iter, tol=tolerance)
 x_hat_gd, logs_gd = subgradient_descent(A_train, b_train,objectiveFunction, lam=lam1, max_iter=max_iter, tol=tolerance)
 
@@ -255,11 +270,25 @@ mse_subgradient = objectiveFunction(x_hat_gd)
 print("==> Results of Subgradient Descent")
 print(f"MSE : {mse_subgradient:.4f}")
 
+if CURRENT_MODE == LASSO:
+    # Lasso sklearn : alpha = lam / n_samples
+    alpha = lam1 / A_train.shape[0]
+    model = Lasso(alpha=alpha, fit_intercept=False, max_iter=max_iter )
+    model.fit(A_train, b_train)
+elif CURRENT_MODE == RIDGE:
+    # Ridge sklearn : alpha = lam / n_samples
+    alpha = lam2 / A_train.shape[0]
+    model = Ridge(alpha=alpha, fit_intercept=False, max_iter=max_iter )
+    model.fit(A_train, b_train)
+elif CURRENT_MODE == ELASTICNET:    
+    # ElasticNet sklearn : alpha = lam1 / n_samples, l1_ratio = lam1 / (lam1 + lam2)
+    alpha = lam1 / A_train.shape[0]
+    l1_ratio = lam1 / (lam1 + lam2)
+    model = ElasticNet(alpha=alpha, l1_ratio=l1_ratio, fit_intercept=False, max_iter=max_iter )
+    model.fit(A_train, b_train)
 
-# Lasso sklearn : alpha = lam / n_samples
-alpha = lam1 / A_train.shape[0]
-model = Lasso(alpha=alpha, fit_intercept=False, max_iter=max_iter )
-model.fit(A_train, b_train)
+
+
 
 # Comparaison des résultats
 mse_sklearn = objectiveFunction(model.coef_)
