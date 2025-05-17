@@ -11,6 +11,20 @@ import matplotlib.pyplot as plt
 
 
 """
+
+# Soft-thresholding
+            eta = 0.99
+            Xplus = soft_thresholding(x_i- grad(x_i)*sizeStep, lam1 *sizeStep)
+            while g(Xplus) > g(x_i) + grad(x_i).T @ (Xplus - x_i) + (1 / (2 * sizeStep)) * np.linalg.norm(Xplus - x_i)**2:
+                sizeStep *= eta
+                print("sizeStep",sizeStep)
+                Xplus = soft_thresholding(x_i - grad(x_i) *sizeStep, lam1 *sizeStep)
+            print("___________________________________________________")
+            x_i = Xplus
+
+
+
+
 # Charger les données California Housing
 data = fetch_california_housing()
 
@@ -28,7 +42,7 @@ A_train, A_test, b_train, b_test = train_test_split(A, b, test_size=0.2, random_
 
 
 #A_train,b_train,b_mean, b_std=load_and_preprocess_Insurance_data(test_size=0.8, random_state=42)
-A_train, b_train, b_mean, b_std = load_and_preprocess_Housing_data(test_size=0.8, random_state=42)
+A_train, b_train, b_mean, b_std = load_and_preprocess_Housing_data(test_size=0.9, random_state=42)
 # A_train, b_train, b_mean, b_std = load_and_preprocess_Student_Performance_data(test_size=0.8, random_state=42)
 
 
@@ -46,46 +60,61 @@ def soft_thresholding(x, lam):
 
 
 
+
+def backtracking_line_search(x_i,gradX_i,gFunc,sizeStep,eta=0.5,c=0.0001):
+    g0 = gFunc(x_i)
+    while True:
+        x_trial = x_i - gradX_i * sizeStep
+        g_trial = gFunc(x_trial)
+        if g_trial <= g0 - c *sizeStep * np.dot(gradX_i, gradX_i):
+            break
+        sizeStep *= eta
+    return sizeStep
+
+
 def ISTA(A, b,ObjectiveFunction,MODE,lam1,lam2, max_iter, tol, adaptive_step=False):
     if(MODE != LASSO and MODE != ELASTICNET and MODE != RIDGE):
         raise ValueError("MODE must be either LASSO or ELASTICNET")
     def grad(x):
         # Gradient de ||Ax - b||²
-        return 2 * (A.T @ (A @ x - b))
+        return (A.T @ (A @ x - b))
     
     n = A.shape[1]
     x_i = np.zeros(n)
-    L = np.linalg.norm(A.T @ A, 2) * 2
-    t = 1.0 / L
+    L = np.linalg.norm(A.T @ A, 2)
 
+    def g(x):
+        # 0.5 * ||Ax - b||²
+        r = A @ x - b
+        return np.dot(r, r) * 0.5
 
-
-
+    sizeStep = 1 / L
     logs =[x_i]
     for k in range(max_iter):
         x_i_old = x_i.copy()
-        
-        # Gradient step
-        x_i = x_i - t * grad(x_i)
-
-
         if(MODE==LASSO):
             # Soft-thresholding
-            x_i = soft_thresholding(x_i, lam1 * t)
+            sizeStep = backtracking_line_search(x_i,grad(x_i),g,sizeStep)
+            x_i = soft_thresholding(x_i - grad(x_i) *sizeStep, lam1 *sizeStep)
+
         elif(MODE==RIDGE):
             # Ridge regression
-            x_i = x_i - t * (grad(x_i) + 2 * lam2 * x_i)
+            sizeStep = backtracking_line_search(x_i,grad(x_i),g,sizeStep)
+            #x_i = x_i -  sizeStep  * (grad(x_i) + lam2 * x_i)/ (1+lam2*sizeStep)
+            lam1 = 0
+            x_i = soft_thresholding(x_i -  sizeStep  * (grad(x_i) + lam2 * x_i), lam1 *  sizeStep )/ (1+lam2*sizeStep)
         else:
             # ElasticNet
-            x_i = soft_thresholding(x_i - t * (grad(x_i) + 2 * lam2 * x_i), lam1 * t)
-
+            sizeStep = backtracking_line_search(x_i,grad(x_i),g,sizeStep)
+            x_i = soft_thresholding(x_i -  sizeStep  * (grad(x_i) + lam2 * x_i), lam1 *  sizeStep )/ (1+lam2*sizeStep)
+        """
         if(adaptive_step):
             # update step
             Lk = np.linalg.norm(grad(x_i) - grad(x_i_old), 2) / np.linalg.norm(x_i - x_i_old, 2)
             if Lk > L / 2:  
                 L = Lk
                 t = 1.0 / L
-        
+        """
         logs.append(x_i)
         #stop criterion 
         if np.abs(ObjectiveFunction(x_i) - ObjectiveFunction(x_i_old)) < tol:
@@ -108,14 +137,14 @@ def fista(A, b,ObjectiveFunction,MODE,lam1,lam2, max_iter, tol):
         raise ValueError("max_iter must be positive")
     def grad(x):
         # Gradient de ||Ax - b||²
-        return 2 * (A.T @ (A @ x - b))
+        return (A.T @ (A @ x - b))
 
 
     n = A.shape[1]
     x_i = np.zeros(n)
     y = x_i.copy()
     t = 1
-    L = np.linalg.norm(A_train.T @ A_train, 2) * 2
+    L = np.linalg.norm(A_train.T @ A_train, 2)
     
 
 
@@ -129,27 +158,23 @@ def fista(A, b,ObjectiveFunction,MODE,lam1,lam2, max_iter, tol):
         # objectif complet
         return g(x) + lam1 * np.linalg.norm(x, 1)
 
-    sizeStep = 1
+    sizeStep = 1 / L
 
     logs =[x_i]
     for k in range(max_iter):
         x_old = x_i.copy()
         if(MODE==LASSO):
-            eta = 0.99
-
-
-            Xplus = soft_thresholding(y- grad(y)*sizeStep, lam1 *sizeStep)
-            while g(Xplus) > g(y) + grad(y).T @ (Xplus - y) + (1 / (2 * sizeStep)) * np.linalg.norm(Xplus - y)**2:
-                sizeStep *= eta
-                print("sizeStep",sizeStep)
-                Xplus = soft_thresholding(y - grad(y) *sizeStep, lam1 *sizeStep)
-            print("___________________________________________________")
-            x_i = Xplus
+            sizeStep = backtracking_line_search(y,grad(y),g,sizeStep)
+            x_i = soft_thresholding(y- grad(y)*sizeStep, lam1 *sizeStep)
         elif(MODE==RIDGE):
-            x_i = y - 1/(L) * (grad(y)+2 * lam2 *y)
+            sizeStep = backtracking_line_search(y,grad(y),g,sizeStep)
+            #x_i = y - sizeStep  * (grad(y)+lam2 *y)/ (1+lam2*sizeStep)
+            lam1 = 0
+            x_i = soft_thresholding(y - sizeStep  * (grad(y)+lam2 *y), lam1 *sizeStep ) / (1+lam2*sizeStep)
+
         else:
-            eta = 0.9
-            x_i = soft_thresholding(y - (1/L) * (grad(y)+2 * lam2 *y), lam1/L)
+            sizeStep = backtracking_line_search(y,grad(y),g,sizeStep)
+            x_i = soft_thresholding(y - sizeStep  * (grad(y)+lam2 *y), lam1 *sizeStep ) / (1+lam2*sizeStep)
             
         t_new = (1 + np.sqrt(1 + 4 * t**2)) / 2
         y = x_i + ((t - 1) / t_new) * (x_i - x_old)
@@ -166,7 +191,7 @@ def subgradient_descent(A, b,ObjectiveFunction,MODE,lam1,lam2, max_iter, tol):
     if(MODE != LASSO and MODE != ELASTICNET and MODE != RIDGE):
         raise ValueError("MODE must be either LASSO or ELASTICNET")
     def grad(x):
-        return 2 * (A.T @ (A @ x - b))
+        return(A.T @ (A @ x - b))
 
     n = A.shape[1]
     x_i = np.zeros(n)
@@ -191,14 +216,14 @@ def subgradient_descent(A, b,ObjectiveFunction,MODE,lam1,lam2, max_iter, tol):
         elif(MODE==RIDGE):
             # RIDGE
             eta_k = eta0 / (k**0.75)
-            x_i = x_i - eta_k * (grad(x_i) + 2 * lam2 * x_i)
+            x_i = x_i - eta_k * (grad(x_i) + lam2 * x_i)
         else:
             # ELASTICNET
             eta_k = eta0 / (k**0.75)
             z = np.sign(x_i)
             zeros = (x_i == 0)
             z[zeros] = np.random.uniform(-1, 1, size=zeros.sum())
-            x_i = x_i - eta_k * (grad(x_i) + 2 * lam2 * x_i + lam1 * z)
+            x_i = x_i - eta_k * (grad(x_i) + lam2 * x_i + lam1 * z)
 
 
         logs.append(x_i.copy())
@@ -214,20 +239,25 @@ def subgradient_descent(A, b,ObjectiveFunction,MODE,lam1,lam2, max_iter, tol):
 x0 = np.zeros(A_train.shape[1])
 max_iter = 1000
 tolerance = 1e-8
+
+nb_features = A_train.shape[1]
+nb_samples = A_train.shape[0]
+lambdaMax = np.max(np.abs(A_train.T @ b_train)) / nb_samples
+
 lam1 = 0.001
-lam2 = 0.01
-CURRENT_MODE = LASSO # Choose between LASSO et ELASTICNET
+lam2 = 0.001
+CURRENT_MODE = RIDGE # Choose between LASSO et ELASTICNET
 
 
 if CURRENT_MODE == LASSO:
     # LASSO  ||Ax - b||² + λ||x||₁
-    objectiveFunction = lambda x: mean_squared_error(b_train, A_train @ x) + lam1 * np.linalg.norm(x, 1)
+    objectiveFunction = lambda x: 0.5*mean_squared_error(b_train, A_train @ x) + lam1 * np.linalg.norm(x, 1)
 elif CURRENT_MODE == RIDGE:
     # RIDGE  ||Ax - b||² + λ||x||₂²
-    objectiveFunction = lambda x: mean_squared_error(b_train, A_train @ x) + lam2 * np.linalg.norm(x, 2)**2
+    objectiveFunction = lambda x: 0.5*mean_squared_error(b_train, A_train @ x) + 0.5*lam2 * np.linalg.norm(x, 2)**2
 elif CURRENT_MODE == ELASTICNET:
     # ELASTICNET ||Ax - b||² + λ₁||x||₁ + λ₂||x||₂²
-    objectiveFunction = lambda x: mean_squared_error(b_train, A_train @ x) + lam1 * np.linalg.norm(x, 1) + lam2 * np.linalg.norm(x, 2)**2
+    objectiveFunction = lambda x: 0.5*mean_squared_error(b_train, A_train @ x) + lam1 * np.linalg.norm(x, 1) + 0.5*lam2 * np.linalg.norm(x, 2)**2
 
 
 
