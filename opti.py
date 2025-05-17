@@ -36,10 +36,7 @@ A_train, b_train, b_mean, b_std = load_and_preprocess_Housing_data(test_size=0.8
 LASSO=0
 RIDGE=1
 ELASTICNET=2
-def gradientCurrying(A, b):
-    def g_grad(w):
-        return 2*(A.T @ (A @ w - b))
-    return g_grad
+
 
 
 
@@ -49,15 +46,21 @@ def soft_thresholding(x, lam):
 
 
 
-def ISTA(A, b, ObjectiveFunction,MODE,lam1,lam2,max_iter,tol=1e-8, adaptive_step=False):
+def ISTA(A, b,ObjectiveFunction,MODE,lam1,lam2, max_iter, tol, adaptive_step=False):
     if(MODE != LASSO and MODE != ELASTICNET and MODE != RIDGE):
         raise ValueError("MODE must be either LASSO or ELASTICNET")
+    def grad(x):
+        # Gradient de ||Ax - b||²
+        return 2 * (A.T @ (A @ x - b))
     
     n = A.shape[1]
     x_i = np.zeros(n)
     L = np.linalg.norm(A.T @ A, 2) * 2
     t = 1.0 / L
-    grad = gradientCurrying(A, b)
+
+
+
+
     logs =[x_i]
     for k in range(max_iter):
         x_i_old = x_i.copy()
@@ -98,11 +101,15 @@ def ISTA(A, b, ObjectiveFunction,MODE,lam1,lam2,max_iter,tol=1e-8, adaptive_step
 
 
 
-def fista(A, b,ObjectiveFunction,lam1=0.1, MODE=LASSO, lam2=0.01, max_iter=50000, tol=1e-8):
+def fista(A, b,ObjectiveFunction,MODE,lam1,lam2, max_iter, tol):
     if(MODE != LASSO and MODE != ELASTICNET and MODE != RIDGE):
         raise ValueError("MODE must be either LASSO or ELASTICNET")
     if(max_iter <= 0):
         raise ValueError("max_iter must be positive")
+    def grad(x):
+        # Gradient de ||Ax - b||²
+        return 2 * (A.T @ (A @ x - b))
+
 
     n = A.shape[1]
     x_i = np.zeros(n)
@@ -112,7 +119,7 @@ def fista(A, b,ObjectiveFunction,lam1=0.1, MODE=LASSO, lam2=0.01, max_iter=50000
     
 
 
-    def f(x):
+    def g(x):
         # ½||Ax - b||²
         r = A @ x - b
         return np.dot(r, r)
@@ -120,38 +127,28 @@ def fista(A, b,ObjectiveFunction,lam1=0.1, MODE=LASSO, lam2=0.01, max_iter=50000
 
     def F(x):
         # objectif complet
-        return f(x) + lam1 * np.linalg.norm(x, 1)
+        return g(x) + lam1 * np.linalg.norm(x, 1)
 
+    sizeStep = 1
 
-    grad = gradientCurrying(A, b)
     logs =[x_i]
     for k in range(max_iter):
         x_old = x_i.copy()
         if(MODE==LASSO):
-            """
-            eta = 0.9
-            # backtracking pour ce pas
-            Lbar = L
-            while True:
-                grad_y = grad(y)
-                # étape de gradient proximal (soft-thresholding)
-                z = soft_thresholding(y - grad_y / Lbar, lam1 / Lbar)
+            eta = 0.99
 
-                Fz = F(z)
-                # Q_L(z,y)
-                Qz = ( f(y)
-                    + np.dot((z - y), grad_y)
-                    + Lbar * np.linalg.norm(z - y)**2
-                    + lam1 * np.linalg.norm(z, 1) )
-                print("hello")
-                if Fz <= Qz:
-                    break
-                Lbar *= eta
-            """
-            x_i = soft_thresholding(y - 1/(L) * (grad(y)), lam1/(L))
+
+            Xplus = soft_thresholding(y- grad(y)*sizeStep, lam1 *sizeStep)
+            while g(Xplus) > g(y) + grad(y).T @ (Xplus - y) + (1 / (2 * sizeStep)) * np.linalg.norm(Xplus - y)**2:
+                sizeStep *= eta
+                print("sizeStep",sizeStep)
+                Xplus = soft_thresholding(y - grad(y) *sizeStep, lam1 *sizeStep)
+            print("___________________________________________________")
+            x_i = Xplus
         elif(MODE==RIDGE):
             x_i = y - 1/(L) * (grad(y)+2 * lam2 *y)
         else:
+            eta = 0.9
             x_i = soft_thresholding(y - (1/L) * (grad(y)+2 * lam2 *y), lam1/L)
             
         t_new = (1 + np.sqrt(1 + 4 * t**2)) / 2
@@ -165,8 +162,9 @@ def fista(A, b,ObjectiveFunction,lam1=0.1, MODE=LASSO, lam2=0.01, max_iter=50000
     return x_i,logs
 
 
-def subgradient_descent(A, b,ObjectiveFunction, lam=1e-5, max_iter=10000, tol=1e-8):
-    # gradient de ||Ax - b||^2
+def subgradient_descent(A, b,ObjectiveFunction,MODE,lam1,lam2, max_iter, tol):
+    if(MODE != LASSO and MODE != ELASTICNET and MODE != RIDGE):
+        raise ValueError("MODE must be either LASSO or ELASTICNET")
     def grad(x):
         return 2 * (A.T @ (A @ x - b))
 
@@ -182,16 +180,26 @@ def subgradient_descent(A, b,ObjectiveFunction, lam=1e-5, max_iter=10000, tol=1e
     for k in range(1, max_iter+1):
         x_old = x_i.copy()
 
-        # sous-gradient du terme ℓ₁
-        z = np.sign(x_i)
-        zeros = (x_i == 0)
-        z[zeros] = np.random.uniform(-1, 1, size=zeros.sum())
+        if(MODE==LASSO):
+            # LASSO
+            z = np.sign(x_i)
+            zeros = (x_i == 0)
+            z[zeros] = np.random.uniform(-1, 1, size=zeros.sum())
+            eta_k = eta0 / (k**0.75)
+            # mise à jour
+            x_i = x_i - eta_k * (grad(x_i) + lam1 * z)
+        elif(MODE==RIDGE):
+            # RIDGE
+            eta_k = eta0 / (k**0.75)
+            x_i = x_i - eta_k * (grad(x_i) + 2 * lam2 * x_i)
+        else:
+            # ELASTICNET
+            eta_k = eta0 / (k**0.75)
+            z = np.sign(x_i)
+            zeros = (x_i == 0)
+            z[zeros] = np.random.uniform(-1, 1, size=zeros.sum())
+            x_i = x_i - eta_k * (grad(x_i) + 2 * lam2 * x_i + lam1 * z)
 
-        # pas décroissant
-        eta_k = eta0 / (k**0.75)
-
-        # mise à jour
-        x_i = x_i - eta_k * (grad(x_i) + lam * z)
 
         logs.append(x_i.copy())
         if np.abs(ObjectiveFunction(x_i) - ObjectiveFunction(x_old)) < tol:
@@ -208,7 +216,7 @@ max_iter = 1000
 tolerance = 1e-8
 lam1 = 0.001
 lam2 = 0.01
-CURRENT_MODE = ELASTICNET # Choose between LASSO et ELASTICNET
+CURRENT_MODE = LASSO # Choose between LASSO et ELASTICNET
 
 
 if CURRENT_MODE == LASSO:
@@ -225,8 +233,8 @@ elif CURRENT_MODE == ELASTICNET:
 
 # Exécution ISTA
 x_hat_ista, logs_ista = ISTA(A_train, b_train,objectiveFunction,CURRENT_MODE ,lam1,lam2, max_iter,tolerance, adaptive_step=False)
-x_hat_fista, logs_fista = fista(A_train, b_train,objectiveFunction, lam1=lam1, MODE=CURRENT_MODE, lam2=lam2, max_iter=max_iter, tol=tolerance)
-x_hat_gd, logs_gd = subgradient_descent(A_train, b_train,objectiveFunction, lam=lam1, max_iter=max_iter, tol=tolerance)
+x_hat_fista, logs_fista = fista(A_train, b_train,objectiveFunction,CURRENT_MODE ,lam1,lam2, max_iter,tolerance)
+x_hat_gd, logs_gd = subgradient_descent(A_train, b_train,objectiveFunction,CURRENT_MODE ,lam1,lam2, max_iter,tolerance)
 
 
 mse_Per_iter_ista = [objectiveFunction(x) for x in logs_ista]
@@ -301,8 +309,9 @@ print(f"MSE ISTA : {mse_test_ista:.4f}")
 print(f"MSE FISTA : {mse_test_fista:.4f}")
 print(f"Difference ISTA vs sklearn : {mse_test_ista - mse_sklearn}")
 print(f"Difference FISTA vs sklearn : {mse_test_fista - mse_sklearn}")
+print(f"Difference Subgradient vs sklearn : {mse_subgradient - mse_sklearn}")
 print(f"Difference ISTA vs Subgradient : {mse_test_ista - mse_subgradient}")
 print(f"Difference ISTA vs FISTA : {mse_test_ista - mse_test_fista}")
-print(f"Difference nb itérations ISTA vs FISTA : {len(logs_ista) - len(logs_fista)}")
+print(f"Difference amount of iteration ISTA vs FISTA : {len(logs_ista) - len(logs_fista)}")
 
 
