@@ -88,7 +88,7 @@ def ISTA(A, b,ObjectiveFunction,MODE,lam1,lam2, max_iter, tol, adaptive_step=Fal
         r = A @ x - b
         return 0.5 * np.linalg.norm(r, 2)**2
 
-    sizeStep = 1 / (L*2)
+    sizeStep = 1 / (L)
     logs =[x_i]
     for k in range(max_iter):
         x_i_old = x_i.copy()
@@ -101,7 +101,7 @@ def ISTA(A, b,ObjectiveFunction,MODE,lam1,lam2, max_iter, tol, adaptive_step=Fal
         elif(MODE==RIDGE):
             # Ridge regression
             sizeStep = backtracking_line_search(x_i,grad(x_i),g,sizeStep)
-            #x_i = x_i -  sizeStep  * (grad(x_i) + lam2 * x_i)/ (1+lam2*sizeStep)
+            #x_i = x_i -  sizeStep  * (grad(x_i) + lam2 * x_i)
             lam1 = 0
             x_i = soft_thresholding(x_i -  sizeStep  * (grad(x_i) + lam2 * x_i), lam1 *  sizeStep )/ (1+lam2*sizeStep)
         else:
@@ -186,7 +186,6 @@ def fista(A, b,ObjectiveFunction,MODE,lam1,lam2, max_iter, tol):
         if np.abs(ObjectiveFunction(x_i) - ObjectiveFunction(x_old)) < tol:
             break
     return x_i,logs
-
     
 def subgradient_descent(A, b,ObjectiveFunction,MODE,lam1,lam2, max_iter, tol):
     if(MODE != LASSO and MODE != ELASTICNET and MODE != RIDGE):
@@ -233,20 +232,56 @@ def subgradient_descent(A, b,ObjectiveFunction,MODE,lam1,lam2, max_iter, tol):
 
     return x_i, logs
 
+def gradient_descent(A, b,ObjectiveFunction,MODE,lam2,max_iter, tol):
+    if(MODE != RIDGE):
+        raise ValueError("MODE must be RIDGE")
+    def grad(x):
+        return(A.T @ (A @ x - b))
+
+    n = A.shape[1]
+    x_i = np.zeros(n)
+    
+    def g(x):
+        # 0.5 * ||Ax - b||²
+        r = A @ x - b
+        return 0.5 * np.linalg.norm(r, 2)**2
+
+
+    #eta0 = 0.001
+    # calcul Lipschitz
+    L = np.linalg.norm(A, ord=2)**2
+    stepsize = 1.0 / L
+    logs = [x_i.copy()]
+    for k in range(1, max_iter+1):
+        x_old = x_i.copy()
+        if(MODE==RIDGE):
+            # RIDGE
+            stepsize = backtracking_line_search(x_i,grad(x_i)+lam2*x_i,g,stepsize)
+            x_i = x_i - stepsize * (grad(x_i) + lam2 * x_i)
+        
+        logs.append(x_i.copy())
+        if np.abs(ObjectiveFunction(x_i) - ObjectiveFunction(x_old)) < tol:
+            break
+
+    return x_i, logs
+
+
+
+
 
 
 # Initialization
 x0 = np.zeros(A_train.shape[1])
-max_iter = 30000
-tolerance = 1e-16
+max_iter = 10000
+tolerance = 1e-4
 
 nb_features = A_train.shape[1]
 nb_samples = A_train.shape[0]
 lambdaMax = np.max(np.abs(A_train.T @ b_train)) / nb_samples
 
-lam1 = 0.6
+lam1 = 0.01
 lam2 = 0.01
-CURRENT_MODE = ELASTICNET # Choose between LASSO et ELASTICNET
+CURRENT_MODE = LASSO # Choose between LASSO, ELASTICNET, RIDGE
 
 
 if CURRENT_MODE == LASSO:
@@ -262,30 +297,40 @@ elif CURRENT_MODE == ELASTICNET:
 
 
 # Exécution ISTA
+
+
+
 x_hat_ista, logs_ista = ISTA(A_train, b_train,objectiveFunction,CURRENT_MODE ,lam1,lam2, max_iter,tolerance, adaptive_step=False)
+print("ISTA converged in", len(logs_ista), "iterations")
+print(objectiveFunction(x_hat_ista))
+
 x_hat_fista, logs_fista = fista(A_train, b_train,objectiveFunction,CURRENT_MODE ,lam1,lam2, max_iter,tolerance)
-x_hat_gd, logs_gd = subgradient_descent(A_train, b_train,objectiveFunction,CURRENT_MODE ,lam1,lam2, max_iter,tolerance)
+print("FISTA converged in", len(logs_fista), "iterations")
+x_hat_sgd, logs_sgd = subgradient_descent(A_train, b_train,objectiveFunction,CURRENT_MODE ,lam1,lam2, max_iter,tolerance)
+print("Subgradient Descent converged in", len(logs_sgd), "iterations")
+
+if CURRENT_MODE == RIDGE:
+    x_hat_gd, logs_gd = gradient_descent(A_train, b_train,objectiveFunction,CURRENT_MODE ,lam2, max_iter,tolerance)
+    print("GD converged in", len(logs_gd), "iterations")
+    mse_Per_iter_gd = [objectiveFunction(x) for x in logs_gd]
+    
+
 
 mse_Per_iter_ista = [objectiveFunction(x) for x in logs_ista]
 mse_Per_iter_fista = [objectiveFunction(x) for x in logs_fista]
-for i in range(len(logs_ista )-1):
-    if mse_Per_iter_ista[i] < mse_Per_iter_ista[i+1]:
-        print("ISTA is not converging")
-        break
+mse_Per_iter_sgd = [objectiveFunction(x) for x in logs_sgd]
 
 
-mse_Per_iter_gd = [objectiveFunction(x) for x in logs_gd]
 
 
-#print first value of each list
-print("MSE ISTA first value:", mse_Per_iter_ista[0])
-print("MSE FISTA first value:", mse_Per_iter_fista[0])
-print("MSE GD first value:", mse_Per_iter_gd[0])
 
 plt.figure(figsize=(12, 6))
-plt.plot(range(1, len(mse_Per_iter_gd) + 1),mse_Per_iter_gd, label="Subgradient Descent")
+plt.plot(range(1, len(mse_Per_iter_sgd) + 1),mse_Per_iter_sgd, label="Subgradient Descent")
 plt.plot( range(1, len(mse_Per_iter_ista) + 1),mse_Per_iter_ista, label="ISTA")
 plt.plot( range(1, len(mse_Per_iter_fista) + 1),mse_Per_iter_fista, label="FISTA")
+if( CURRENT_MODE == RIDGE):
+    plt.plot( range(1, len(mse_Per_iter_gd) + 1),mse_Per_iter_gd, label="Gradient Descent")
+
 plt.legend()
 plt.title("MSE vs Iterations")
 plt.xlabel("Iterations")
@@ -312,7 +357,7 @@ print("==> Results of FISTA" )
 print(f"MSE : {mse_test_fista:.4f}")
 
 
-mse_subgradient = mean_squared_error(b_train, A_train @ x_hat_gd)
+mse_subgradient = mean_squared_error(b_train, A_train @ x_hat_sgd)
 print("==> Results of Subgradient Descent")
 print(f"MSE : {mse_subgradient:.4f}")
 
