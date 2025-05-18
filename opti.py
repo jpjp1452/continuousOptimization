@@ -50,6 +50,7 @@ A_train, b_train, b_mean, b_std = load_and_preprocess_Housing_data(test_size=0.9
 LASSO=0
 RIDGE=1
 ELASTICNET=2
+LEASTSQUARES=3
 
 
 
@@ -70,6 +71,16 @@ def backtracking_line_search(x_i,gradX_i,gFunc,sizeStep,eta=0.5,c=0.0001):
             break
         sizeStep *= eta
     return sizeStep
+def backtrackingWolfe(x_i,gradX_i,grad_X_step, gFunc,sizeStep,eta=0.5,c1=0.0001, c2=0.001):
+    g0 = gFunc(x_i)
+    while True:
+        x_trial = x_i - gradX_i * sizeStep
+        g_trial = gFunc(x_trial)
+        if g_trial <= g0 - c1 *sizeStep * np.dot(gradX_i, gradX_i) and c2 * np.dot(gradX_i, gradX_i) <= np.dot(grad_X_step, gradX_i):
+            break
+        sizeStep *= eta
+    return sizeStep
+
 
 
 def ISTA(A, b,ObjectiveFunction,MODE,lam1,lam2, max_iter, tol, adaptive_step=False):
@@ -152,7 +163,7 @@ def fista(A, b,ObjectiveFunction,MODE,lam1,lam2, max_iter, tol):
     def g(x):
         # ½||Ax - b||²
         r = A @ x - b
-        return np.dot(r, r)
+        return 0.5* np.dot(r, r)
 
 
     def F(x):
@@ -265,6 +276,77 @@ def gradient_descent(A, b,ObjectiveFunction,MODE,lam2,max_iter, tol):
 
     return x_i, logs
 
+def LBGFS (A, b,ObjectiveFunction,MODE,lam1,lam2, max_iter, tol, m_choice):
+    if(MODE !=LEASTSQUARES):
+        raise ValueError("MODE must be LEASTSQUARES")
+    
+    def grad(x):
+        return(A.T @ (A @ x - b))
+    def g(x):
+            # 0.5 * ||Ax - b||²
+            r = A @ x - b
+            return 0.5 * np.linalg.norm(r, 2)**2
+    
+    n = A.shape[1]
+    x_i = np.zeros(n)
+    x_i_old = np.zeros(n)
+    
+    L = np.linalg.norm(A, ord=2)**2
+    stepsize = 1.0 / L
+    logs = [x_i.copy()]
+    #definitio m parameter
+    m=m_choice
+    # definition of set S, R, phi
+    S = []
+    Y = []
+    phi = []
+    T = []
+
+    
+    q=grad(x_i)
+    # start for loop
+    for k in range(1, max_iter):
+
+        #step 0: compute approximation to the inverse of the Hessian matrix
+        if (k==1):
+            B_zero=1.0
+        else:
+            B_zero= [S[k-1].T*Y[k-1]]/[Y[k-1].T*Y[k-1]]
+
+        #step 1: compute the sea
+        
+        q=grad(x_i)
+        for i in range(k-1, k-m):
+
+            T[i] = phi[i] * S[i].T * q
+            q=q-T[i]*Y[i]
+        
+        r=B_zero*q
+
+        for i in range(k-m, k-1):
+
+            beta= phi[i] * Y[i].T * r
+            r=r+S[i]*(T[i] - beta)
+
+        direction = -r
+        #step 2: compute the step size
+        #tk satisfies the Wolfe conditions
+        stepsize= backtrackingWolfe(x_i,grad(x_i),grad(x_i + direction*stepsize),g,stepsize)
+        x_old= x_i.copy()
+        x_i = x_i + stepsize * direction
+        if (k>m):
+            #discard element k-m
+            del S[k-m]
+            del Y[k-m]
+        S[k]= x_i - x_i_old
+        Y[k]= grad(x_i) - grad(x_i_old)
+
+    
+        logs.append(x_i.copy())
+        if np.abs(ObjectiveFunction(x_i) - ObjectiveFunction(x_old)) < tol:
+            break
+
+    return x_i, logs
 
 
 
@@ -293,6 +375,9 @@ elif CURRENT_MODE == RIDGE:
 elif CURRENT_MODE == ELASTICNET:
     # ELASTICNET ||Ax - b||² + λ₁||x||₁ + λ₂||x||₂²
     objectiveFunction = lambda x: 0.5 * np.linalg.norm(A_train@x-b_train, 2)**2 + lam1 * np.linalg.norm(x, 1) + 0.5*lam2 * np.linalg.norm(x, 2)**2
+elif CURRENT_MODE == LEASTSQUARES:
+    # LEASTSQUARES ||Ax - b||²
+    objectiveFunction = lambda x: 0.5 * np.linalg.norm(A_train@x-b_train, 2)**2
 
 
 
@@ -313,7 +398,11 @@ if CURRENT_MODE == RIDGE:
     x_hat_gd, logs_gd = gradient_descent(A_train, b_train,objectiveFunction,CURRENT_MODE ,lam2, max_iter,tolerance)
     print("GD converged in", len(logs_gd), "iterations")
     mse_Per_iter_gd = [objectiveFunction(x) for x in logs_gd]
-    
+
+if CURRENT_MODE== LEASTSQUARES:
+    x_hat_lbgfs, logs_lbgfs = LBGFS(A_train, b_train,objectiveFunction,CURRENT_MODE ,lam1,lam2, max_iter,tolerance, m_choice=5)
+    print("LBGFS converged in", len(logs_lbgfs), "iterations")
+    mse_Per_iter_lbgfs = [objectiveFunction(x) for x in logs_lbgfs]   
 
 
 mse_Per_iter_ista = [objectiveFunction(x) for x in logs_ista]
@@ -330,6 +419,8 @@ plt.plot( range(1, len(mse_Per_iter_ista) + 1),mse_Per_iter_ista, label="ISTA")
 plt.plot( range(1, len(mse_Per_iter_fista) + 1),mse_Per_iter_fista, label="FISTA")
 if( CURRENT_MODE == RIDGE):
     plt.plot( range(1, len(mse_Per_iter_gd) + 1),mse_Per_iter_gd, label="Gradient Descent")
+if( CURRENT_MODE == LEASTSQUARES):
+    plt.plot( range(1, len(mse_Per_iter_lbgfs) + 1),mse_Per_iter_lbgfs, label="LBGFS")
 
 plt.legend()
 plt.title("MSE vs Iterations")
@@ -377,7 +468,10 @@ elif CURRENT_MODE == ELASTICNET:
     l1_ratio = lam1 / (lam1 + lam2)
     model = ElasticNet(alpha=alpha, l1_ratio=l1_ratio, fit_intercept=False, max_iter=max_iter )
     model.fit(A_train, b_train)
-
+elif CURRENT_MODE == LEASTSQUARES:
+    # Least Squares sklearn
+    model = LinearRegression(fit_intercept=False)
+    model.fit(A_train, b_train)
 
 
 
@@ -390,6 +484,7 @@ print("==> Results comparison")
 print(f"MSE sklearn : {mse_sklearn:.4f}")
 print(f"MSE ISTA : {mse_test_ista:.4f}")
 print(f"MSE FISTA : {mse_test_fista:.4f}")
+print(f'MSE LBSGFS : {mse_test_lbgfs:.4f}')
 print(f"Difference ISTA vs sklearn : {mse_test_ista - mse_sklearn}")
 print(f"Difference FISTA vs sklearn : {mse_test_fista - mse_sklearn}")
 print(f"Difference Subgradient vs sklearn : {mse_subgradient - mse_sklearn}")
