@@ -3,7 +3,7 @@ import pandas as pd
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error
-from sklearn.linear_model import Lasso,Ridge,ElasticNet
+from sklearn.linear_model import Lasso,Ridge,ElasticNet,LinearRegression
 from sklearn.datasets import fetch_california_housing
 from data_preprocessing import *
 import matplotlib.pyplot as plt
@@ -84,7 +84,7 @@ def backtrackingWolfe(x_i,gradX_i,grad_X_step, gFunc,sizeStep,eta=0.5,c1=0.0001,
 
 
 def ISTA(A, b,ObjectiveFunction,MODE,lam1,lam2, max_iter, tol, adaptive_step=False):
-    if(MODE != LASSO and MODE != ELASTICNET and MODE != RIDGE):
+    if(MODE != LASSO and MODE != ELASTICNET and MODE != RIDGE and MODE != LEASTSQUARES):
         raise ValueError("MODE must be either LASSO or ELASTICNET")
     def grad(x):
         # Gradient de ||Ax - b||²
@@ -115,10 +115,12 @@ def ISTA(A, b,ObjectiveFunction,MODE,lam1,lam2, max_iter, tol, adaptive_step=Fal
             #x_i = x_i -  sizeStep  * (grad(x_i) + lam2 * x_i)
             lam1 = 0
             x_i = soft_thresholding(x_i -  sizeStep  * (grad(x_i) + lam2 * x_i), lam1 *  sizeStep )/ (1+lam2*sizeStep)
-        else:
+        elif(MODE==ELASTICNET):
             # ElasticNet
             sizeStep = backtracking_line_search(x_i,grad(x_i),g,sizeStep)
             x_i = soft_thresholding(x_i -  sizeStep  * (grad(x_i) + lam2 * x_i), lam1 *  sizeStep )/ (1+lam2*sizeStep)
+        else:
+            x_i = x_i - sizeStep * grad(x_i)
         """
         if(adaptive_step):
             # update step
@@ -143,7 +145,7 @@ def ISTA(A, b,ObjectiveFunction,MODE,lam1,lam2, max_iter, tol, adaptive_step=Fal
 
 
 def fista(A, b,ObjectiveFunction,MODE,lam1,lam2, max_iter, tol):
-    if(MODE != LASSO and MODE != ELASTICNET and MODE != RIDGE):
+    if(MODE != LASSO and MODE != ELASTICNET and MODE != RIDGE and MODE != LEASTSQUARES):
         raise ValueError("MODE must be either LASSO or ELASTICNET")
     if(max_iter <= 0):
         raise ValueError("max_iter must be positive")
@@ -183,11 +185,11 @@ def fista(A, b,ObjectiveFunction,MODE,lam1,lam2, max_iter, tol):
             #x_i = y - sizeStep  * (grad(y)+lam2 *y)/ (1+lam2*sizeStep)
             lam1 = 0
             x_i = soft_thresholding(y - sizeStep  * (grad(y)+lam2 *y), lam1 *sizeStep ) / (1+lam2*sizeStep)
-
-        else:
+        elif(MODE==ELASTICNET):
             sizeStep = backtracking_line_search(y,grad(y),g,sizeStep)
             x_i = soft_thresholding(y - sizeStep  * (grad(y)+lam2 *y), lam1 *sizeStep ) / (1+lam2*sizeStep)
-            
+        else:
+            x_i = y - sizeStep * grad(y)
         t_new = (1 + np.sqrt(1 + 4 * t**2)) / 2
         y = x_i + ((t - 1) / t_new) * (x_i - x_old)
         t = t_new
@@ -199,7 +201,7 @@ def fista(A, b,ObjectiveFunction,MODE,lam1,lam2, max_iter, tol):
     return x_i,logs
     
 def subgradient_descent(A, b,ObjectiveFunction,MODE,lam1,lam2, max_iter, tol):
-    if(MODE != LASSO and MODE != ELASTICNET and MODE != RIDGE):
+    if(MODE != LASSO and MODE != ELASTICNET and MODE != RIDGE and MODE != LEASTSQUARES):
         raise ValueError("MODE must be either LASSO or ELASTICNET")
     def grad(x):
         return(A.T @ (A @ x - b))
@@ -228,13 +230,18 @@ def subgradient_descent(A, b,ObjectiveFunction,MODE,lam1,lam2, max_iter, tol):
             # RIDGE
             eta_k = eta0 / (k**0.75)
             x_i = x_i - eta_k * (grad(x_i) + lam2 * x_i)
-        else:
+        elif(MODE==ELASTICNET):
             # ELASTICNET
             eta_k = eta0 / (k**0.75)
             z = np.sign(x_i)
             zeros = (x_i == 0)
             z[zeros] = np.random.uniform(-1, 1, size=zeros.sum())
             x_i = x_i - eta_k * (grad(x_i) + lam2 * x_i + lam1 * z)
+        else:
+            # LEASTSQUARES
+            eta_k = eta0 / (k**0.75)
+            x_i = x_i - eta_k * grad(x_i)
+        
 
 
         logs.append(x_i.copy())
@@ -269,6 +276,10 @@ def gradient_descent(A, b,ObjectiveFunction,MODE,lam2,max_iter, tol):
             # RIDGE
             stepsize = backtracking_line_search(x_i,grad(x_i)+lam2*x_i,g,stepsize)
             x_i = x_i - stepsize * (grad(x_i) + lam2 * x_i)
+        else:
+            # LEASTSQUARES
+            stepsize = backtracking_line_search(x_i,grad(x_i),g,stepsize)
+            x_i = x_i - stepsize * grad(x_i)
         
         logs.append(x_i.copy())
         if np.abs(ObjectiveFunction(x_i) - ObjectiveFunction(x_old)) < tol:
@@ -291,59 +302,84 @@ def LBGFS (A, b,ObjectiveFunction,MODE,lam1,lam2, max_iter, tol, m_choice):
     x_i = np.zeros(n)
     x_i_old = np.zeros(n)
     
-    L = np.linalg.norm(A, ord=2)**2
-    stepsize = 1.0 / L
+    L = np.linalg.norm(A.T @ A, 2)
+    stepsize = 1.0/L #The init step influences a lot the convergence plot, try with 320 instead of L as example
     logs = [x_i.copy()]
     #definitio m parameter
     m=m_choice
     # definition of set S, R, phi
     S = []
     Y = []
-    phi = []
-    T = []
+    #phi = []
+
+
+
+
+
+    def line_search(f, grad, x, d, alpha0=1.0, c1=1e-4, c2=0.9):
+        α = alpha0
+        fx = f(x); gdx = grad(x).T @ d
+        while True:
+            if f(x + α*d) > fx + c1*α*gdx:
+                α *= 0.5
+            elif grad(x + α*d).T @ d < c2*gdx:
+                α *= 1.1
+            else:
+                return α
 
     
-    q=grad(x_i)
     # start for loop
     for k in range(1, max_iter):
-
+        
         #step 0: compute approximation to the inverse of the Hessian matrix
         if (k==1):
-            B_zero=1.0
+            B_zero= np.eye(n)
         else:
-            B_zero= [S[k-1].T*Y[k-1]]/[Y[k-1].T*Y[k-1]]
+            B_zero=( S[0].T @ Y[0]) / (Y[0].T @ Y[0]) * np.eye(n)
 
-        #step 1: compute the sea
-        
+        #step 1: compute the gradient
         q=grad(x_i)
-        for i in range(k-1, k-m):
 
-            T[i] = phi[i] * S[i].T * q
-            q=q-T[i]*Y[i]
-        
-        r=B_zero*q
+        T = []
+        phi = []
+        for i in range(len(S)):
+            phi.append( 1.0 / (Y[i].T @ S[i]))
+            if(1.0 / (Y[i].T @ S[i]) < 0):
+                raise ValueError("phi must be positive")
+            T.append(phi[i] * S[i].T @ q)
+            q=q-(T[i]*Y[i])
+        r=B_zero @ q
 
-        for i in range(k-m, k-1):
-
-            beta= phi[i] * Y[i].T * r
-            r=r+S[i]*(T[i] - beta)
-
+        for i in range(len(S)-1, -1, -1):
+            beta = phi[i] * Y[i].T @ r
+            r = r + (S[i] * (T[i] - beta))
         direction = -r
         #step 2: compute the step size
         #tk satisfies the Wolfe conditions
-        stepsize= backtrackingWolfe(x_i,grad(x_i),grad(x_i + direction*stepsize),g,stepsize)
-        x_old= x_i.copy()
+        #stepsize= backtrackingWolfe(x_i,grad(x_i),grad(x_i + direction*stepsize),g,stepsize)
+        stepsize = line_search(g, grad, x_i, direction)
+        x_i_old= x_i.copy()
         x_i = x_i + stepsize * direction
-        if (k>m):
-            #discard element k-m
-            del S[k-m]
-            del Y[k-m]
-        S[k]= x_i - x_i_old
-        Y[k]= grad(x_i) - grad(x_i_old)
 
+        s = x_i - x_i_old
+        y = grad(x_i) - grad(x_i_old)
+
+        if (len(S) >= m):
+            #removed oldest element from back of the list
+            S.pop()
+            Y.pop()
+            #phi.pop()
+        #insert new elements at the beginning of the list
+
+
+
+        S.insert(0, x_i - x_i_old)
+        Y.insert(0, grad(x_i) - grad(x_i_old))
+        #phi.insert(0, 1.0 / (Y[0].T @ S[0]))
+        
     
         logs.append(x_i.copy())
-        if np.abs(ObjectiveFunction(x_i) - ObjectiveFunction(x_old)) < tol:
+        if np.abs(ObjectiveFunction(x_i) - ObjectiveFunction(x_i_old)) < tol:
             break
 
     return x_i, logs
@@ -363,7 +399,7 @@ lambdaMax = np.max(np.abs(A_train.T @ b_train)) / nb_samples
 
 lam1 = 0.01
 lam2 = 0.01
-CURRENT_MODE = LASSO # Choose between LASSO, ELASTICNET, RIDGE
+CURRENT_MODE = LEASTSQUARES # Choose between LASSO, ELASTICNET, RIDGE
 
 
 if CURRENT_MODE == LASSO:
@@ -400,7 +436,7 @@ if CURRENT_MODE == RIDGE:
     mse_Per_iter_gd = [objectiveFunction(x) for x in logs_gd]
 
 if CURRENT_MODE== LEASTSQUARES:
-    x_hat_lbgfs, logs_lbgfs = LBGFS(A_train, b_train,objectiveFunction,CURRENT_MODE ,lam1,lam2, max_iter,tolerance, m_choice=5)
+    x_hat_lbgfs, logs_lbgfs = LBGFS(A_train, b_train,objectiveFunction,CURRENT_MODE ,lam1,lam2, max_iter,tolerance, m_choice=10)
     print("LBGFS converged in", len(logs_lbgfs), "iterations")
     mse_Per_iter_lbgfs = [objectiveFunction(x) for x in logs_lbgfs]   
 
@@ -473,6 +509,9 @@ elif CURRENT_MODE == LEASTSQUARES:
     model = LinearRegression(fit_intercept=False)
     model.fit(A_train, b_train)
 
+    mse_test_lbgfs = mean_squared_error(b_train, A_train @ x_hat_lbgfs)
+    
+
 
 
 # Comparaison des résultats
@@ -484,7 +523,8 @@ print("==> Results comparison")
 print(f"MSE sklearn : {mse_sklearn:.4f}")
 print(f"MSE ISTA : {mse_test_ista:.4f}")
 print(f"MSE FISTA : {mse_test_fista:.4f}")
-print(f'MSE LBSGFS : {mse_test_lbgfs:.4f}')
+if CURRENT_MODE == LEASTSQUARES:
+    print(f"MSE LBGFS : {mse_test_lbgfs:.4f}")
 print(f"Difference ISTA vs sklearn : {mse_test_ista - mse_sklearn}")
 print(f"Difference FISTA vs sklearn : {mse_test_fista - mse_sklearn}")
 print(f"Difference Subgradient vs sklearn : {mse_subgradient - mse_sklearn}")
