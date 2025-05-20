@@ -71,15 +71,17 @@ def backtracking_line_search(x_i,gradX_i,gFunc,sizeStep,eta=0.5,c=0.0001):
             break
         sizeStep *= eta
     return sizeStep
-def backtrackingWolfe(x_i,gradX_i,grad_X_step, gFunc,sizeStep,eta=0.5,c1=0.0001, c2=0.001):
-    g0 = gFunc(x_i)
-    while True:
-        x_trial = x_i - gradX_i * sizeStep
-        g_trial = gFunc(x_trial)
-        if g_trial <= g0 - c1 *sizeStep * np.dot(gradX_i, gradX_i) and c2 * np.dot(gradX_i, gradX_i) <= np.dot(grad_X_step, gradX_i):
-            break
-        sizeStep *= eta
-    return sizeStep
+
+def line_search_Wolfe(f, grad, x, d, alpha0=1.0, c1=1e-4, c2=0.9):
+        α = alpha0
+        fx = f(x); gdx = grad(x).T @ d
+        while True:
+            # if Armijo condition or curvature condition is not satisfied
+            if f(x + α*d) > fx + c1*α*gdx or grad(x + α*d).T @ d < c2*gdx:
+                α *= 0.5
+            
+            else:
+                return α
 
 
 
@@ -312,21 +314,6 @@ def LBGFS (A, b,ObjectiveFunction,MODE,lam1,lam2, max_iter, tol, m_choice):
     Y = []
     #phi = []
 
-
-
-
-
-    def line_search(f, grad, x, d, alpha0=1.0, c1=1e-4, c2=0.9):
-        α = alpha0
-        fx = f(x); gdx = grad(x).T @ d
-        while True:
-            if f(x + α*d) > fx + c1*α*gdx:
-                α *= 0.5
-            elif grad(x + α*d).T @ d < c2*gdx:
-                α *= 1.1
-            else:
-                return α
-
     
     # start for loop
     for k in range(1, max_iter):
@@ -357,7 +344,7 @@ def LBGFS (A, b,ObjectiveFunction,MODE,lam1,lam2, max_iter, tol, m_choice):
         #step 2: compute the step size
         #tk satisfies the Wolfe conditions
         #stepsize= backtrackingWolfe(x_i,grad(x_i),grad(x_i + direction*stepsize),g,stepsize)
-        stepsize = line_search(g, grad, x_i, direction)
+        stepsize = line_search_Wolfe(g, grad, x_i, direction)
         x_i_old= x_i.copy()
         x_i = x_i + stepsize * direction
 
