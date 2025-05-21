@@ -7,6 +7,7 @@ from sklearn.linear_model import Lasso,Ridge,ElasticNet,LinearRegression
 from sklearn.datasets import fetch_california_housing
 from data_preprocessing import *
 import matplotlib.pyplot as plt
+import time
 
 
 
@@ -27,7 +28,7 @@ ELASTICNET=2
 LEASTSQUARES=3
 
 # Initialization
-max_iter = 50000
+max_iter = 10000
 tolerance = 1e-9
 
 
@@ -62,15 +63,15 @@ def backtracking_line_search(x_i,gradX_i,gFunc,sizeStep,eta=0.5,c=0.0001):
     return sizeStep
 
 def line_search_Wolfe(f, grad, x, d, alpha0=1.0, c1=1e-4, c2=0.9):
-        α = alpha0
+        alpha = alpha0
         fx = f(x); gdx = grad(x).T @ d
         while True:
             # if Armijo condition or curvature condition is not satisfied
-            if f(x + α*d) > fx + c1*α*gdx or grad(x + α*d).T @ d < c2*gdx:
-                α *= 0.5
+            if f(x + alpha*d) > fx + c1*alpha*gdx or grad(x + alpha*d).T @ d < c2*gdx:
+                alpha *= 0.5
             
             else:
-                return α
+                return alpha
 
 
 
@@ -146,10 +147,11 @@ def subgradient_descent(INFOFunction):
 
     stepsize = 1 / (L)
     logs =[x_i]
-    for _ in range(max_iter):
+    for k in range(1, max_iter+1):
         x_old = x_i.copy()
-        stepsize = backtracking_line_search(x_i,grad(x_i),g,stepsize)
+        #stepsize = backtracking_line_search(x_i,grad(x_i),g,stepsize)
         x_i = x_i - stepsize * (grad(x_i)+subgradientX_i(x_i))
+        stepsize = (1/(L))/ (k**0.5)
         logs.append(x_i)
         #stop criterion 
         if StopCriterionFunction(x_i, x_old, tol):
@@ -350,12 +352,14 @@ INFO["tolerance"] = tolerance
 
 # Exécution ISTA
 
-
+time_ista = time.time()
 x_hat_ista, logs_ista = ISTA(INFO)
+print("ISTA time:", time.time() - time_ista)
 print("ISTA converged in", len(logs_ista), "iterations")
 
-
+time_fista = time.time()
 x_hat_fista, logs_fista = FISTA(INFO)
+print("FISTA time:", time.time() - time_fista)
 print("FISTA converged in", len(logs_fista), "iterations")
 
 
