@@ -27,20 +27,20 @@ ELASTICNET=2
 LEASTSQUARES=3
 
 # Initialization
-max_iter = 5000
-tolerance = 1e-6
+max_iter = 50000
+tolerance = 1e-9
 
 
 nb_features = A_train.shape[1]
 nb_samples = A_train.shape[0]
 lambdaMax = np.max(np.abs(A_train.T @ b_train)) / nb_samples
 
-lam1 = 0.1
-lam2 = 0.01
+lam1 = 0.2
+lam2 = 0.03
 
 m = 10 # Number of past iterations to consider in L-BFGS
 
-CURRENT_MODE = LEASTSQUARES # Choose between LASSO, ELASTICNET, RIDGE
+CURRENT_MODE = LASSO # Choose between LASSO, ELASTICNET, RIDGE
 
 
 
@@ -74,76 +74,12 @@ def line_search_Wolfe(f, grad, x, d, alpha0=1.0, c1=1e-4, c2=0.9):
 
 
 
-def ISTA(A, b,StopCriterionFunction,MODE,lam1,lam2, max_iter, tol, adaptive_step=False):
-    if(MODE != LASSO and MODE != ELASTICNET and MODE != RIDGE and MODE != LEASTSQUARES):
-        raise ValueError("MODE must be either LASSO or ELASTICNET")
-    def grad(x):
-        # Gradient de ||Ax - b||²
-        return (A.T @ (A @ x - b))
-    
-    n = A.shape[1]
-    x_i = np.zeros(n)
-    L = np.linalg.norm(A, 2)**2
-
-    def g(x):
-        # 0.5 * ||Ax - b||²
-        r = A @ x - b
-        return 0.5 * np.linalg.norm(r, 2)**2
-
-    sizeStep = 1 / (L)
-    logs =[x_i]
-    k=0
-    for k in range(max_iter):
-        x_old = x_i.copy()
-        if(MODE==LASSO):
-            # Soft-thresholding
-            
-            sizeStep = backtracking_line_search(x_i,grad(x_i),g,sizeStep)
-            x_i = soft_thresholding(x_i - grad(x_i) *sizeStep, lam1 *sizeStep)
-
-        elif(MODE==RIDGE):
-            # Ridge regression
-            x_i = x_i -  sizeStep  * (grad(x_i) + lam2 * x_i)
-            lam1 = 0
-            sizeStep = backtracking_line_search(x_i,grad(x_i),g,sizeStep)
-            x_i = soft_thresholding(x_i -  sizeStep  * (grad(x_i) + lam2 * x_i), lam1 *  sizeStep )/ (1+lam2*sizeStep)
-        elif(MODE==ELASTICNET):
-            # ElasticNet
-            sizeStep = backtracking_line_search(x_i,grad(x_i),g,sizeStep)
-            x_i = soft_thresholding(x_i -  sizeStep  * (grad(x_i) + lam2 * x_i), lam1 *  sizeStep )/ (1+lam2*sizeStep)
-        else:
-            x_i = x_i - sizeStep * grad(x_i)
-        logs.append(x_i)
-        #stop criterion 
-        if StopCriterionFunction(x_i, x_old, tol):
-            break
-    print
-    return x_i,logs
 
 
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-def ISTA2(functionInfo):
+def ISTA(functionInfo):
 
     grad = functionInfo["gradient"]
     g = functionInfo["g(x)"]
@@ -167,104 +103,7 @@ def ISTA2(functionInfo):
             break
     return x_i,logs
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-def fista(A, b,StopCriterionFunction,MODE,lam1,lam2, max_iter, tol,functionInfo=None):
-    if(MODE != LASSO and MODE != ELASTICNET and MODE != RIDGE and MODE != LEASTSQUARES):
-        raise ValueError("MODE must be either LASSO or ELASTICNET")
-    if(max_iter <= 0):
-        raise ValueError("max_iter must be positive")
-    def grad(x):
-        # Gradient de ||Ax - b||²
-        return A_train.T @ (A_train @ x - b_train)
-    
-
-
-
-    grad2 = functionInfo["gradient"]
-    g2 = functionInfo["g(x)"]
-    x_i2 = functionInfo["x_0"].copy()
-    L2 = functionInfo["Lipschitz"]
-    prox2 = functionInfo["prox Operator"]
-    StopCriterionFunction = functionInfo["stop criterion"]
-    max_iter2 = functionInfo["max_iter"]
-    tol2 = functionInfo["tolerance"]
-
-
-
-
-
-    n = A.shape[1]
-    x_i = np.zeros(n)
-    y = x_i.copy()
-    t = 1
-    L = np.linalg.norm(A, 2)**2
-    
-    def g(x):
-        # ½||Ax - b||²
-        r = A @ x - b
-        return 0.5 * np.linalg.norm(A_train@x-b_train, 2)**2
-    sizeStep = 1 / L
-    print("sizeStep",sizeStep)
-    logs =[x_i]
-    for k in range(max_iter):
-        x_old = x_i.copy()
-        if(MODE==LASSO):
-            sizeStep = backtracking_line_search(y,grad(y),g,sizeStep)
-            x_i = soft_thresholding(y- grad(y)*sizeStep, lam1 *sizeStep)
-        elif(MODE==RIDGE):
-            sizeStep = backtracking_line_search(y,grad(y),g,sizeStep)
-            lam1 = 0
-            x_i = soft_thresholding(y - sizeStep  * (grad(y)+lam2 *y), lam1 *sizeStep ) / (1+lam2*sizeStep)
-        elif(MODE==ELASTICNET):
-            sizeStep = backtracking_line_search(y,grad(y),g,sizeStep)
-            x_i = soft_thresholding(y - sizeStep  * (grad(y)+lam2 *y), lam1 *sizeStep ) / (1+lam2*sizeStep)
-        else:
-            sizeStep = backtracking_line_search(y,grad(y),g,sizeStep)
-            x_i = y - sizeStep * grad(y)
-        t_new = (1 + np.sqrt(1 + 4 * t**2)) / 2
-        y = x_i + ((t - 1) / t_new) * (x_i - x_old)
-        t = t_new
-
-        logs.append(x_i)
-        #stop criterion 
-        if StopCriterionFunction(x_i, x_old, tol):
-            break
-    print("sizeStep",sizeStep)
-    return x_i,logs
-
-
-def fista2(functionInfo):
+def FISTA(functionInfo):
     grad = functionInfo["gradient"]
     g = functionInfo["g(x)"]
     x_i = functionInfo["x_0"].copy()
@@ -295,111 +134,7 @@ def fista2(functionInfo):
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    
-def subgradient_descent(A, b,StopCriterionFunction,MODE,lam1,lam2, max_iter, tol):
-    if(MODE != LASSO and MODE != ELASTICNET and MODE != RIDGE and MODE != LEASTSQUARES):
-        raise ValueError("MODE must be either LASSO or ELASTICNET")
-        
-    if(MODE == RIDGE):
-        def grad(x):
-            return(A.T @ (A @ x - b)) + lam2 * x
-        def g(x):
-            # 0.5 * ||Ax - b||²
-            r = A @ x - b
-            return 0.5 * np.linalg.norm(r, 2)**2 + 0.5 * lam2 * np.linalg.norm(x, 2)**2
-    else:
-        def grad(x):
-            return(A.T @ (A @ x - b))
-        def g(x):
-                # 0.5 * ||Ax - b||²
-                r = A @ x - b
-                return 0.5 * np.linalg.norm(r, 2)**2
-
-    n = A.shape[1]
-    x_i = np.zeros(n)
-    
-    # calculatate Lipschitz
-    L = np.linalg.norm(A, 2)**2
-    stepsize = 1.0 / L
-
-
-    logs = [x_i.copy()]
-    for k in range(1, max_iter+1):
-        x_old = x_i.copy()
-
-        if(MODE==LASSO):
-            # LASSO
-            z = np.sign(x_i)
-            zeros = (x_i == 0)
-            z[zeros] = np.random.uniform(-1, 1, size=zeros.sum())
-            stepsize = backtracking_line_search(x_i,grad(x_i),g,stepsize)
-            # mise à jour
-            x_i = x_i - stepsize * (grad(x_i) + lam1 * z)
-        elif(MODE==RIDGE):
-            # RIDGE
-            stepsize = backtracking_line_search(x_i,grad(x_i),g,stepsize)
-            x_i = x_i - stepsize * (grad(x_i))
-        elif(MODE==ELASTICNET):
-            # ELASTICNET
-            z = np.sign(x_i)
-            zeros = (x_i == 0)
-            z[zeros] = np.random.uniform(-1, 1, size=zeros.sum())
-            stepsize = backtracking_line_search(x_i,grad(x_i),g,stepsize)
-            x_i = x_i - stepsize * (grad(x_i) + lam2 * x_i + lam1 * z)
-        else:
-            # LEASTSQUARES
-            stepsize = backtracking_line_search(x_i,grad(x_i),g,stepsize)
-            x_i = x_i - stepsize * grad(x_i)
-        
-        logs.append(x_i.copy())
-        if StopCriterionFunction(x_i, x_old, tol):
-            break
-
-    return x_i, logs
-
-
-
-def subgradient_descent2(INFOFunction):
+def subgradient_descent(INFOFunction):
     grad = INFOFunction["gradient"]
     g = INFOFunction["g(x)"]
     x_i = INFOFunction["x_0"].copy()
@@ -424,77 +159,7 @@ def subgradient_descent2(INFOFunction):
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-def gradient_descent(A, b,StopCriterionFunction,MODE,lam2,max_iter, tol):
-    if(MODE !=LEASTSQUARES and MODE != RIDGE):
-        raise ValueError("MODE must be LEASTSQUARES")
-    if(MODE == LEASTSQUARES):
-        def grad(x):
-            return(A.T @ (A @ x - b))
-        def g(x):
-                # 0.5 * ||Ax - b||²
-                r = A @ x - b
-                return 0.5 * np.linalg.norm(r, 2)**2
-    elif(MODE == RIDGE):
-        def grad(x):
-            return(A.T @ (A @ x - b)) + lam2 * x
-        def g(x):
-            # 0.5 * ||Ax - b||²
-            r = A @ x - b
-            return 0.5 * np.linalg.norm(r, 2)**2 + 0.5 * lam2 * np.linalg.norm(x, 2)**2
-
-    n = A.shape[1]
-    x_i = np.zeros(n)
-    
-
-    #eta0 = 0.001
-    # calcul Lipschitz
-    L = np.linalg.norm(A, ord=2)**2
-    stepsize = 1.0 / L
-    logs = [x_i.copy()]
-    for k in range(1, max_iter+1):
-        x_old = x_i.copy()
-        if(MODE==RIDGE):
-            # RIDGE
-            stepsize = backtracking_line_search(x_i,grad(x_i)+lam2*x_i,g,stepsize)
-            x_i = x_i - stepsize * (grad(x_i))
-        else:
-            # LEASTSQUARES
-            stepsize = backtracking_line_search(x_i,grad(x_i),g,stepsize)
-            x_i = x_i - stepsize * grad(x_i)
-        
-        logs.append(x_i.copy())
-        if StopCriterionFunction(x_i, x_old, tol):
-            break
-
-    return x_i, logs
-
-
-
-
-def gradient_descent2(INFOFunction):
+def gradient_descent(INFOFunction):
     grad = INFOFunction["gradient"]
     g = INFOFunction["g(x)"]
     x_i = INFOFunction["x_0"].copy()
@@ -515,143 +180,7 @@ def gradient_descent2(INFOFunction):
             break
     return x_i,logs
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-def gradient_descent2(INFOFunction):
-    grad = INFOFunction["gradient"]
-    g = INFOFunction["g(x)"]
-    x_i = INFOFunction["x_0"].copy()
-    L = INFOFunction["Lipschitz"]
-    StopCriterionFunction = INFOFunction["stop criterion"]
-    max_iter = INFOFunction["max_iter"]
-    tol = INFOFunction["tolerance"]
-
-    stepsize = 1 / (L)
-    logs =[x_i]
-    for _ in range(max_iter):
-        x_old = x_i.copy()
-        stepsize = backtracking_line_search(x_i,grad(x_i),g,stepsize)
-        x_i = x_i - stepsize * grad(x_i)
-        logs.append(x_i)
-        #stop criterion 
-        if StopCriterionFunction(x_i, x_old, tol):
-            break
-    return x_i,logs
-
-
-
-
-
-
-
-
-
-def LBGFS (A, b,StopCriterionFunction,MODE,lam1,lam2, max_iter, tol, m_choice):
-    if(MODE !=LEASTSQUARES and MODE != RIDGE):
-        raise ValueError("MODE must be LEASTSQUARES")
-    if(MODE == LEASTSQUARES):
-        def grad(x):
-            return(A.T @ (A @ x - b))
-        def g(x):
-                # 0.5 * ||Ax - b||²
-                r = A @ x - b
-                return 0.5 * np.linalg.norm(r, 2)**2
-    elif(MODE == RIDGE):
-        def grad(x):
-            return(A.T @ (A @ x - b)) + lam2 * x
-        def g(x):
-            # 0.5 * ||Ax - b||²
-            r = A @ x - b
-            return 0.5 * np.linalg.norm(r, 2)**2 + 0.5 * lam2 * np.linalg.norm(x, 2)**2
-    
-    n = A.shape[1]
-    x_i = np.zeros(n)
-    x_old = np.zeros(n)
-    
-    L = np.linalg.norm(A, 2)**2
-    stepsize = 1.0/L #The init step influences a lot the convergence plot, try with 320 instead of L as example
-    logs = [x_i.copy()]
-    #definitio m parameter
-    m=m_choice
-    # definition of set S, R, phi
-    S = []
-    Y = []
-    
-    # start for loop
-    r = np.zeros(n)
-    for k in range(1, max_iter):
-        
-        #step 0: compute approximation to the inverse of the Hessian matrix
-        if (k==1):
-            B_zero= np.eye(n)
-            B_zeroArray = np.ones(n)
-        else:
-            #B_zero=( S[0].T @ Y[0]) / (Y[0].T @ Y[0]) * np.eye(n)
-            #B_zero=( S[0].T @ Y[0]) / (Y[0].T @ Y[0])*sparse.eye(n, format='csr')
-            B_zeroArray = ( S[0].T @ Y[0]) / (Y[0].T @ Y[0]) * np.ones(n)
-
-        #step 1: compute the gradient
-        q=grad(x_i)
-
-        T = []
-        phi = []
-        for i in range(len(S)):
-            phi.append( 1.0 / (Y[i].T @ S[i]))
-            if(1.0 / (Y[i].T @ S[i]) < 0):
-                raise ValueError("phi must be positive")
-            T.append(phi[i] * S[i].T @ q)
-            q=q-(T[i]*Y[i])
-        
-        for i in range(len(r)):
-            r[i] = B_zeroArray[i] * q[i]
-
-        for i in range(len(S)-1, -1, -1):
-            beta = phi[i] * Y[i].T @ r
-            r = r + (S[i] * (T[i] - beta))
-        direction = -r
-        #step 2: compute the step size
-        #tk satisfies the Wolfe conditions
-        stepsize = line_search_Wolfe(g, grad, x_i, direction)
-        x_old= x_i.copy()
-        x_i = x_i + stepsize * direction
-
-        s = x_i - x_old
-        y = grad(x_i) - grad(x_old)
-
-        if (len(S) >= m):
-            #removed oldest element from back of the list
-            S.pop()
-            Y.pop()
-            #phi.pop()
-        #insert new elements at the beginning of the list
-        S.insert(0, x_i - x_old)
-        Y.insert(0, grad(x_i) - grad(x_old))
-        #phi.insert(0, 1.0 / (Y[0].T @ S[0]))
-        logs.append(x_i.copy())
-        if StopCriterionFunction(x_i, x_old, tol):
-            break
-
-    return x_i, logs
-
-
-
-
-
-
-
-def LBGFS2(INFOFunction):
+def LBGFS(INFOFunction):
     grad = INFOFunction["gradient"]
     g = INFOFunction["g(x)"]
     x_i = INFOFunction["x_0"].copy()
@@ -716,99 +245,7 @@ def LBGFS2(INFOFunction):
     return x_i, logs
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-def BGFS(A, b,StopCriterionFunction,MODE,lam1,lam2, max_iter, tol, m_choice):
-    if(MODE !=LEASTSQUARES and MODE != RIDGE):
-        raise ValueError("MODE must be LEASTSQUARES")
-    if(MODE == LEASTSQUARES):
-        def grad(x):
-            return(A.T @ (A @ x - b))
-        def g(x):
-            # 0.5 * ||Ax - b||²
-            r = A @ x - b
-            return 0.5 * np.linalg.norm(r, 2)**2
-    elif(MODE == RIDGE):
-        def grad(x):
-            return(A.T @ (A @ x - b)) + lam2 * x
-        def g(x):
-            # 0.5 * ||Ax - b||²
-            r = A @ x - b
-            return 0.5 * np.linalg.norm(r, 2)**2 + 0.5 * lam2 * np.linalg.norm(x, 2)**2
-    n = A.shape[1]
-    x_i = np.zeros(n)
-    x_old = np.zeros(n)
-    
-    L = np.linalg.norm(A, 2)**2
-    stepsize = 1.0/L #The init step influences a lot the convergence plot, try with 320 instead of L as example
-    logs = [x_i.copy()]
-    #definitio m parameter
-    m=m_choice
-    # definition of set S, R, phi
-    #phi = []
-    H_zero = np.eye(n)
-    for k in range(1, max_iter):
-        #step 0: compute approximation to the inverse of the Hessian matrix
-
-        if (k==1):
-            H_inverse= np.eye(n)
-        else:
-            rho = 1.0/(y.T @ s)
-            V   = np.eye(n) - rho * np.outer(s, y)
-            H_inverse = V @ H_inverse @ V.T + rho * np.outer(s, s)
-        direction = -H_inverse @ grad(x_i)
-
-        #step 2: compute the step size
-        stepsize = line_search_Wolfe(g, grad, x_i, direction)
-        x_old= x_i.copy()
-        x_i = x_i + stepsize * direction
-        s = x_i - x_old
-        y = grad(x_i) - grad(x_old)
-        
-        logs.append(x_i.copy())
-        if StopCriterionFunction(x_i, x_old, tol):
-            break
-    return x_i, logs
-
-
-
-
-def BGFS2(INFOFunction):
+def BGFS(INFOFunction):
     grad = INFOFunction["gradient"]
     g = INFOFunction["g(x)"]
     x_i = INFOFunction["x_0"].copy()
@@ -894,11 +331,18 @@ elif CURRENT_MODE == LEASTSQUARES:
     INFO["subgradient_descent"] = lambda x: x * 0
 
 
-def stopCriterion(x_i, x_old, tol):
-    return np.abs(objectiveFunction(x_i) - objectiveFunction(x_old)) < tol
+def stopCriterion1(x_i, x_old, tol):
+    #print(np.abs(objectiveFunction(x_i) - objectiveFunction(x_old))/max(1, np.abs(objectiveFunction(x_i))))
+    return np.abs(objectiveFunction(x_i) - objectiveFunction(x_old))/max(1, np.abs(objectiveFunction(x_i))) < tol
+
+def stopCriterion2(x_i, x_old, tol):
+    #print(np.linalg.norm(INFO["gradient"](x_i), 2))
+    return  np.linalg.norm(INFO["gradient"](x_i), 2) < tol
+
+
 #INFO["x_0"] = np.random.randn(nb_features)
 INFO["x_0"] = np.zeros(nb_features)
-INFO["stop criterion"] = stopCriterion
+INFO["stop criterion"] = stopCriterion1
 INFO["tolerance"] = tolerance
 
 
@@ -907,76 +351,35 @@ INFO["tolerance"] = tolerance
 # Exécution ISTA
 
 
-""" 
-x_hat_ista, logs_ista = ISTA(A_train, b_train,stopCriterion,CURRENT_MODE ,lam1,lam2, max_iter,tolerance, adaptive_step=False)
+x_hat_ista, logs_ista = ISTA(INFO)
 print("ISTA converged in", len(logs_ista), "iterations")
 
-x_hat_ista2, logs_ista2 = ISTA2(INFO)
-print("ISTA2 converged in", len(logs_ista2), "iterations")
 
-print("ISTA x_hat", x_hat_ista)
-print("ISTA2 x_hat", x_hat_ista2)
-
-
-x_hat_fista, logs_fista = fista(A_train, b_train,stopCriterion,CURRENT_MODE ,lam1,lam2, max_iter,tolerance,INFO)
+x_hat_fista, logs_fista = FISTA(INFO)
 print("FISTA converged in", len(logs_fista), "iterations")
 
-x_hat_fista2, logs_fista2 = fista2(INFO)
-print("FISTA2 converged in", len(logs_fista2), "iterations")
-
-print("FISTA x_hat", x_hat_fista)
-print("FISTA2 x_hat", x_hat_fista2)
 
 
 
 
 
 
-x_hat_sgd, logs_sgd = subgradient_descent(A_train, b_train,stopCriterion,CURRENT_MODE ,lam1,lam2, max_iter,tolerance)
+x_hat_sgd, logs_sgd = subgradient_descent(INFO)
 print("Subgradient Descent converged in", len(logs_sgd), "iterations")
 
 
-x_hat_sgd2, logs_sgd2 = subgradient_descent2(INFO)
-print("Subgradient Descent2 converged in", len(logs_sgd2), "iterations")
-print("Subgradient Descent x_hat", x_hat_sgd)
-print("Subgradient Descent2 x_hat", x_hat_sgd2)
-
-"""
-
 if CURRENT_MODE== LEASTSQUARES or CURRENT_MODE == RIDGE:
-    """
-    x_hat_gd, logs_gd = gradient_descent(A_train, b_train,stopCriterion,CURRENT_MODE ,lam2, max_iter,tolerance)
+    x_hat_gd, logs_gd = gradient_descent(INFO)
     print("GD converged in", len(logs_gd), "iterations")
     mse_Per_iter_gd = [objectiveFunction(x) for x in logs_gd]
 
-
-    x_hat_gd2, logs_gd2 = gradient_descent2(INFO)
-    print("GD2 converged in", len(logs_gd2), "iterations")
-    print("GD x_hat", x_hat_gd)
-    print("GD2 x_hat", x_hat_gd2)
-    x_hat_lbgfs, logs_lbgfs = LBGFS(A_train, b_train,stopCriterion,CURRENT_MODE ,lam1,lam2, max_iter,tolerance, m_choice=10)
+    x_hat_lbgfs, logs_lbgfs = LBGFS(INFO)
     print("LBGFS converged in", len(logs_lbgfs), "iterations")
     mse_Per_iter_lbgfs = [objectiveFunction(x) for x in logs_lbgfs]  
 
-    x_hat_lbgfs2, logs_lbgfs2 = LBGFS2(INFO)
-    print("LBGFS2 converged in", len(logs_lbgfs2), "iterations")
 
-    print("LBGFS x_hat", x_hat_lbgfs)
-    print("LBGFS2 x_hat", x_hat_lbgfs2)
-    """
-
-
-    x_hat_bgfs, logs_bgfs = BGFS(A_train, b_train,stopCriterion,CURRENT_MODE ,lam1,lam2, max_iter,tolerance, m_choice=10)
+    x_hat_bgfs, logs_bgfs = BGFS(INFO)
     print("BGFS converged in", len(logs_bgfs), "iterations")
-
-    x_hat_bgfs2, logs_bgfs2 = BGFS2(INFO)
-    print("BGFS2 converged in", len(logs_bgfs2), "iterations")
-
-    print("BGFS x_hat", x_hat_bgfs)
-    print("BGFS2 x_hat", x_hat_bgfs2)
-
-    exit()
-
     mse_Per_iter_bgfs = [objectiveFunction(x) for x in logs_bgfs]   
 
 
