@@ -44,5 +44,5 @@ def load_and_preprocess_Student_Performance_data(train_size=0.8, random_state=42
 def load_and_preprocess_Insurance_data(train_size=0.8, random_state=42):
     return load_and_preprocess_data(csv_path="dataset/insurance.csv",targetColumn = 'charges',train_size=train_size, random_state=random_state)
 
-def load_and_preprocess_genes_data(train_size=0.8, random_state=42):
-    return load_and_preprocess_data(csv_path="dataset/genes_combined.csv",targetColumn = 'target',train_size=train_size, random_state=random_state)
+def load_and_preprocess_car_data(train_size=0.8, random_state=42):
+    return load_and_preprocess_data(csv_path="dataset/Car_details.csv",targetColumn = 'selling_price',train_size=train_size, random_state=random_state)
