@@ -41,7 +41,7 @@ lam2 = 0.03
 
 m = 10 # Number of past iterations to consider in L-BFGS
 
-CURRENT_MODE = LASSO # Choose between LASSO, ELASTICNET, RIDGE
+CURRENT_MODE = RIDGE # Choose between LASSO, ELASTICNET, RIDGE
 
 
 
@@ -68,7 +68,6 @@ def line_search_Wolfe(f, grad, x, d, alpha0=1.0, c1=1e-4, c2=0.9):
             # if Armijo condition or curvature condition is not satisfied
             if f(x + alpha*d) > fx + c1*alpha*gdx or grad(x + alpha*d).T @ d < c2*gdx:
                 alpha *= 0.5
-                print("alpha", alpha)
             else:
                 return alpha
         return alpha
@@ -223,7 +222,7 @@ def LBGFS(INFOFunction):
     m = INFOFunction["m_choice"]
     n = x_i.shape[0]
 
-    stepsize = 1.0/L
+    stepsize = 1.0
     logs = [x_i.copy()]
     # definition of set S, R, phi
     S = []
@@ -294,7 +293,7 @@ def BGFS(INFOFunction):
     m = INFOFunction["m_choice"]
     n = x_i.shape[0]
 
-    stepsize = 1.0/L
+    stepsize = 1.0
     logs = [x_i.copy()]
     for k in range(1, max_iter):
         #step 0: compute approximation to the inverse of the Hessian matrix
@@ -430,9 +429,8 @@ elif CURRENT_MODE == LEASTSQUARES:
 
 
 
-NB_TRIES = 50
+NB_TRIES = 10
 
-"""
 nb_iterations_ISTA = []
 mse_ISTA = []
 time_ISTA = []
@@ -451,14 +449,14 @@ mse_SGD = []
 time_SGD = []
 
 for i in range(NB_TRIES):
-    x_0 = np.random.randn(nb_features)
-    INFO["x_0"] = x_0
+    print("x_0", INFO["x_0"])
     x_ISTA, logs_ISTA, timeSpent, timeSpentBacktracking, timeSpentProx = ISTA(INFO)
     nb_iterations_ISTA.append(len(logs_ISTA))
     mse_ISTA.append(mean_squared_error(b_train, A_train @ x_ISTA))
     time_ISTA.append(timeSpent)
     timeSpentBacktracking_ISTA.append(timeSpentBacktracking)
     timeSpentProx_ISTA.append(timeSpentProx)
+    print("ISTA converged in", len(logs_ISTA), "iterations")
     #######################################################
     x_FISTA, logs_FISTA, timeSpent, timeSpentBacktracking, timeSpentProx = FISTA(INFO)
     nb_iterations_FISTA.append(len(logs_FISTA))
@@ -466,6 +464,7 @@ for i in range(NB_TRIES):
     time_FISTA.append(timeSpent)
     timeSpentBacktracking_FISTA.append(timeSpentBacktracking)
     timeSpentProx_FISTA.append(timeSpentProx)
+    print("FISTA converged in", len(logs_FISTA), "iterations")
     #######################################################
     x_SGD, logs_SGD, timeSpent = subgradient_descent(INFO)
     nb_iterations_SGD.append(len(logs_SGD))
@@ -508,7 +507,6 @@ df= pd.DataFrame({
 # this creates an .xlsx that will open cleanly in Excel
 df.to_excel('performance_results_ratio_subroutine.xlsx', index=False)
 
-"""
 CURRENT_MODE = RIDGE
 if CURRENT_MODE == LASSO:
     # LASSO  ||Ax - b||² + λ||x||₁
@@ -573,8 +571,7 @@ time_BGFS = []
 timeSpentBacktracking_BGFS = []
 
 for i in range(NB_TRIES):
-    x_0 = np.random.randn(nb_features)
-    INFO["x_0"] = x_0
+
     x_ISTA, logs_ISTA, timeSpent, timeSpentBacktracking, timeSpentProx = ISTA(INFO)
     nb_iterations_ISTA.append(len(logs_ISTA))
     mse_ISTA.append(mean_squared_error(b_train, A_train @ x_ISTA))
@@ -694,7 +691,8 @@ elif CURRENT_MODE == LEASTSQUARES:
 
 A_train, b_train,b_mean, b_std = load_and_preprocess_data(csv_path="synthetic_datasets/synthetic_data_1000_features.csv",targetColumn = 'target',train_size=train_size, random_state=random_state)
 nb_features = A_train.shape[1]
-
+x_0 = np.zeros(nb_features)
+INFO["x_0"] = x_0
 nb_iterations_LBGFS = []
 time_LBGFS = []
 
@@ -702,8 +700,7 @@ nb_iterations_BGFS = []
 time_BGFS = []
 
 for i in range(NB_TRIES):
-    x_0 = np.random.randn(nb_features)
-    INFO["x_0"] = x_0
+
     x_LBGFS, logs_LBGFS, timeSpent, timeSpentBacktracking = LBGFS(INFO)
     nb_iterations_LBGFS.append(len(logs_LBGFS))
     time_LBGFS.append(timeSpent)

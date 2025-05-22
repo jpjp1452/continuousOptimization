@@ -14,11 +14,12 @@ import time
 
 train_size = 0.9
 random_state = 42
-
 #A_train,b_train,b_mean, b_std=load_and_preprocess_Insurance_data(train_size=train_size, random_state=random_state)
+#NAME_DATASET = "Insurance" 
 A_train, b_train, b_mean, b_std = load_and_preprocess_Housing_data(train_size=train_size, random_state=random_state)
+NAME_DATASET = "Housing" # Choose between "Insurance", "Student_Performance", "Housing", "car", "synthetic_data_1000_features"
 #A_train, b_train, b_mean, b_std = load_and_preprocess_Student_Performance_data(train_size=train_size, random_state=random_state)
-#A_train, b_train, b_mean, b_std = load_and_preprocess_car_data(train_size=train_size, random_state=random_state)
+#NAME_DATASET = "Student_Performance"
 #A_train, b_train,b_mean, b_std = load_and_preprocess_data(csv_path="synthetic_datasets/synthetic_data_1000_features.csv",targetColumn = 'target',train_size=train_size, random_state=random_state)
 
 
@@ -28,7 +29,7 @@ ELASTICNET=2
 LEASTSQUARES=3
 
 # Initialization
-max_iter = 10000
+max_iter = 4000
 tolerance = 1e-9
 
 
@@ -36,17 +37,18 @@ nb_features = A_train.shape[1]
 nb_samples = A_train.shape[0]
 lambdaMax = np.max(np.abs(A_train.T @ b_train)) / nb_samples
 
-lam1 = 0.2
-lam2 = 0.03
+lam1 = 0.4
+lam2 = 0.1
 
+lambdaString = f"lambda1_{lam1}_lambda2_{lam2}"
 m = 10 # Number of past iterations to consider in L-BFGS
 
 CURRENT_MODE = LASSO # Choose between LASSO, ELASTICNET, RIDGE
 
 
 
-def soft_thresholding(x, lam):
-    return np.sign(x) * np.maximum(np.abs(x) - lam, 0.0)
+def soft_thresholding(x, tau):
+    return np.sign(x) * np.maximum(np.abs(x) - tau, 0.0)
 
 
 
@@ -58,7 +60,6 @@ def backtracking_line_search(x_i,gradX_i,gFunc,sizeStep,eta=0.5,c=0.0001):
         g_trial = gFunc(x_trial)
         if g_trial <= g0 - c *sizeStep * np.dot(gradX_i, gradX_i):
             break
-        print("sizeStep",sizeStep)
         sizeStep *= eta
     return sizeStep
 
@@ -91,7 +92,7 @@ def ISTA(functionInfo):
     max_iter = functionInfo["max_iter"]
     tol = functionInfo["tolerance"]
 
-    sizeStep = 1 
+    sizeStep = 1
     logs =[x_i]
     for _ in range(max_iter):
         x_old = x_i.copy()
@@ -286,7 +287,7 @@ def BFGS(INFOFunction):
 
 
 
-INFO= {"gradient": None,"g(x)": None, "Lipschitz": None, "prox Operator": None,"subgradient_descent": None,"x_0": None, "stop criterion": None, "tolerance": tolerance, "max_iter": max_iter, "m_choice": m}
+INFO_Func= {"gradient": None,"g(x)": None, "Lipschitz": None, "prox Operator": None,"subgradient_descent": None,"x_0": None, "stop criterion": None, "tolerance": tolerance, "max_iter": max_iter, "m_choice": m}
 
 def subgradient(x):
     z = np.sign(x)
@@ -299,38 +300,38 @@ if CURRENT_MODE == LASSO:
     objectiveFunction = lambda x: 0.5 * np.linalg.norm(A_train@x-b_train, 2)**2 + lam1 * np.linalg.norm(x, 1)
     #gradient of the smooth part
     gradient = lambda x: A_train.T @ (A_train @ x - b_train)
-    INFO["gradient"] = gradient
-    INFO["g(x)"] = lambda x: 0.5 * np.linalg.norm(A_train@x-b_train, 2)**2
-    INFO["Lipschitz"] = np.linalg.norm(A_train, 2)**2
-    INFO["prox Operator"] = lambda x, stepsize: soft_thresholding(x, lam1 * stepsize)
-    INFO["subgradient_descent"] = lambda x: subgradient(x) * lam1
+    INFO_Func["gradient"] = gradient
+    INFO_Func["g(x)"] = lambda x: 0.5 * np.linalg.norm(A_train@x-b_train, 2)**2
+    INFO_Func["Lipschitz"] = np.linalg.norm(A_train, 2)**2
+    INFO_Func["prox Operator"] = lambda x, stepsize: soft_thresholding(x, lam1 * stepsize)
+    INFO_Func["subgradient_descent"] = lambda x: subgradient(x) * lam1
 elif CURRENT_MODE == RIDGE:
     # RIDGE  ||Ax - b||² + λ||x||₂²
     objectiveFunction = lambda x: 0.5 * np.linalg.norm(A_train@x-b_train, 2)**2 + 0.5*lam2 * np.linalg.norm(x, 2)**2
     gradient = lambda x: A_train.T @ (A_train @ x - b_train) + lam2 * x
-    INFO["gradient"] = gradient
-    INFO["g(x)"] = lambda x: 0.5 * np.linalg.norm(A_train@x-b_train, 2)**2 + 0.5 * lam2 * np.linalg.norm(x, 2)**2
-    INFO["Lipschitz"] = np.linalg.norm(A_train, 2)**2
-    INFO["prox Operator"] = lambda x, stepsize: soft_thresholding(x, 0 * stepsize) / (1 + lam2 * stepsize)
-    INFO["subgradient_descent"] = lambda x: x * 0
+    INFO_Func["gradient"] = gradient
+    INFO_Func["g(x)"] = lambda x: 0.5 * np.linalg.norm(A_train@x-b_train, 2)**2 + 0.5 * lam2 * np.linalg.norm(x, 2)**2
+    INFO_Func["Lipschitz"] = np.linalg.norm(A_train, 2)**2
+    INFO_Func["prox Operator"] = lambda x, stepsize: soft_thresholding(x, 0 * stepsize) / (1 + lam2 * stepsize)
+    INFO_Func["subgradient_descent"] = lambda x: x * 0
 elif CURRENT_MODE == ELASTICNET:
     # ELASTICNET ||Ax - b||² + λ₁||x||₁ + λ₂||x||₂²
     objectiveFunction = lambda x: 0.5 * np.linalg.norm(A_train@x-b_train, 2)**2 + lam1 * np.linalg.norm(x, 1) + 0.5*lam2 * np.linalg.norm(x, 2)**2
     gradient = lambda x: A_train.T @ (A_train @ x - b_train) + lam2 * x
-    INFO["gradient"] = gradient
-    INFO["g(x)"] = lambda x: 0.5 * np.linalg.norm(A_train@x-b_train, 2)**2 + lam2 * np.linalg.norm(x, 2)**2
-    INFO["Lipschitz"] = np.linalg.norm(A_train, 2)**2
-    INFO["prox Operator"] = lambda x, stepsize: soft_thresholding(x, lam1 * stepsize) / (1 + lam2 * stepsize)
-    INFO["subgradient_descent"] = lambda x: subgradient(x) * lam1
+    INFO_Func["gradient"] = gradient
+    INFO_Func["g(x)"] = lambda x: 0.5 * np.linalg.norm(A_train@x-b_train, 2)**2 + lam2 * np.linalg.norm(x, 2)**2
+    INFO_Func["Lipschitz"] = np.linalg.norm(A_train, 2)**2
+    INFO_Func["prox Operator"] = lambda x, stepsize: soft_thresholding(x, lam1 * stepsize) / (1 + lam2 * stepsize)
+    INFO_Func["subgradient_descent"] = lambda x: subgradient(x) * lam1
 
 elif CURRENT_MODE == LEASTSQUARES:
     # LEASTSQUARES ||Ax - b||²
     objectiveFunction = lambda x: 0.5 * np.linalg.norm(A_train@x-b_train, 2)**2
-    INFO["gradient"] = lambda x: A_train.T @ (A_train @ x - b_train)
-    INFO["g(x)"] = lambda x: 0.5 * np.linalg.norm(A_train@x-b_train, 2)**2
-    INFO["Lipschitz"] = np.linalg.norm(A_train, 2)**2
-    INFO["prox Operator"] = lambda x, lam: x
-    INFO["subgradient_descent"] = lambda x: x * 0
+    INFO_Func["gradient"] = lambda x: A_train.T @ (A_train @ x - b_train)
+    INFO_Func["g(x)"] = lambda x: 0.5 * np.linalg.norm(A_train@x-b_train, 2)**2
+    INFO_Func["Lipschitz"] = np.linalg.norm(A_train, 2)**2
+    INFO_Func["prox Operator"] = lambda x, lam: x
+    INFO_Func["subgradient_descent"] = lambda x: x * 0
 
 
 def stopCriterion1(x_i, x_old, tol):
@@ -338,14 +339,18 @@ def stopCriterion1(x_i, x_old, tol):
     return np.abs(objectiveFunction(x_i) - objectiveFunction(x_old))/max(1, np.abs(objectiveFunction(x_i))) < tol
 
 def stopCriterion2(x_i, x_old, tol):
-    #print(np.linalg.norm(INFO["gradient"](x_i), 2))
-    return  np.linalg.norm(INFO["gradient"](x_i), 2) < tol
+    #print(np.linalg.norm(INFO_Func["gradient"](x_i), 2))
+    return  np.linalg.norm(INFO_Func["gradient"](x_i), 2) < tol
+
+def stopCriterion3(x_i, x_old, tol):
+    return np.max(np.abs(x_i - x_old)) < tol
 
 
-#INFO["x_0"] = np.random.randn(nb_features)
-INFO["x_0"] = np.zeros(nb_features)
-INFO["stop criterion"] = stopCriterion1
-INFO["tolerance"] = tolerance
+
+#INFO_Func["x_0"] = np.random.randn(nb_features)
+INFO_Func["x_0"] = np.zeros(nb_features)
+INFO_Func["stop criterion"] = stopCriterion1
+INFO_Func["tolerance"] = tolerance
 
 
 
@@ -353,12 +358,12 @@ INFO["tolerance"] = tolerance
 # Exécution ISTA
 
 time_ista = time.time()
-x_hat_ista, logs_ista = ISTA(INFO)
+x_hat_ista, logs_ista = ISTA(INFO_Func)
 print("ISTA time:", time.time() - time_ista)
 print("ISTA converged in", len(logs_ista), "iterations")
 
 time_fista = time.time()
-x_hat_fista, logs_fista = FISTA(INFO)
+x_hat_fista, logs_fista = FISTA(INFO_Func)
 print("FISTA time:", time.time() - time_fista)
 print("FISTA converged in", len(logs_fista), "iterations")
 
@@ -368,21 +373,21 @@ print("FISTA converged in", len(logs_fista), "iterations")
 
 
 
-x_hat_sgd, logs_sgd = subgradient_descent(INFO)
+x_hat_sgd, logs_sgd = subgradient_descent(INFO_Func)
 print("Subgradient Descent converged in", len(logs_sgd), "iterations")
 
 
 if CURRENT_MODE== LEASTSQUARES or CURRENT_MODE == RIDGE:
-    x_hat_gd, logs_gd = gradient_descent(INFO)
+    x_hat_gd, logs_gd = gradient_descent(INFO_Func)
     print("GD converged in", len(logs_gd), "iterations")
     mse_Per_iter_gd = [objectiveFunction(x) for x in logs_gd]
 
-    x_hat_lbfgs, logs_lbfgs = LBFGS(INFO)
+    x_hat_lbfgs, logs_lbfgs = LBFGS(INFO_Func)
     print("LBFGS converged in", len(logs_lbfgs), "iterations")
     mse_Per_iter_lbfgs = [objectiveFunction(x) for x in logs_lbfgs]  
 
 
-    x_hat_bfgs, logs_bfgs = BFGS(INFO)
+    x_hat_bfgs, logs_bfgs = BFGS(INFO_Func)
     print("BFGS converged in", len(logs_bfgs), "iterations")
     mse_Per_iter_bfgs = [objectiveFunction(x) for x in logs_bfgs]   
 
@@ -417,8 +422,16 @@ plt.ylabel("MSE")
 plt.yscale('log')
 plt.xscale('log',base=10)
 plt.grid()
+if CURRENT_MODE == LASSO:
+    plt.savefig(f"lasso_{NAME_DATASET}_{lambdaString}.png")
+elif CURRENT_MODE == ELASTICNET:
+    plt.savefig(f"elasticnet_{NAME_DATASET}_{lambdaString}.png")
+elif CURRENT_MODE == RIDGE:
+    plt.savefig(f"ridge_{NAME_DATASET}_{lambdaString}.png")
+elif CURRENT_MODE == LEASTSQUARES:
+    plt.savefig(f"leastSquares_{NAME_DATASET}_{lambdaString}.png")
 plt.show()
-plt.savefig("i.png")
+
 
 
 
@@ -459,23 +472,27 @@ if( CURRENT_MODE == LEASTSQUARES) or (CURRENT_MODE == RIDGE):
 if CURRENT_MODE == LASSO:
     # Lasso sklearn : alpha = lam / n_samples
     alpha = lam1 / A_train.shape[0]
-    model = Lasso(alpha=alpha, fit_intercept=False, max_iter=max_iter )
+    model = Lasso(alpha=alpha, fit_intercept=False, max_iter=max_iter, tol=tolerance)
     model.fit(A_train, b_train)
+    print("converged in", model.n_iter_, "iterations")    
 elif CURRENT_MODE == RIDGE:
     # Ridge sklearn : alpha = lam / n_samples
     alpha = lam2 / A_train.shape[0]
-    model = Ridge(alpha=alpha, fit_intercept=False, max_iter=max_iter )
+    model = Ridge(alpha=alpha, fit_intercept=False, max_iter=max_iter, tol=tolerance)
     model.fit(A_train, b_train)
+    print("converged in", model.n_iter_, "iterations")    
 elif CURRENT_MODE == ELASTICNET:    
     # ElasticNet sklearn : alpha = lam1 / n_samples, l1_ratio = lam1 / (lam1 + lam2)
     alpha = lam1 / A_train.shape[0]
     l1_ratio = lam1 / (lam1 + lam2)
-    model = ElasticNet(alpha=alpha, l1_ratio=l1_ratio, fit_intercept=False, max_iter=max_iter )
+    model = ElasticNet(alpha=alpha, l1_ratio=l1_ratio, fit_intercept=False, max_iter=max_iter, tol=tolerance)
     model.fit(A_train, b_train)
+    print("converged in", model.n_iter_, "iterations")    
 elif CURRENT_MODE == LEASTSQUARES:
     # Least Squares sklearn
-    model = LinearRegression(fit_intercept=False)
+    model = LinearRegression(fit_intercept=False, tol=tolerance)
     model.fit(A_train, b_train)
+    print("converged in", model.n_iter_, "iterations")
     mse_test_lbfgs = mean_squared_error(b_train, A_train @ x_hat_lbfgs)
     
 
