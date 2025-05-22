@@ -12,7 +12,7 @@ import time
 now = time.perf_counter
 
 
-train_size = 0.75
+train_size = 0.9
 random_state = 42
 
 #A_train,b_train,b_mean, b_std=load_and_preprocess_Insurance_data(train_size=train_size, random_state=random_state)
@@ -51,27 +51,27 @@ def soft_thresholding(x, lam):
 
 
 
-def backtracking_line_search(f, grad, x, d, alpha0=1.0, c1=1e-4):
-        α = alpha0
-        fx = f(x); g*d*x = grad(x).T @ d
-        while True:
-            # if Armijo condition condition is not satisfied
-            if f(x + αd) > fx + c1*α*gdx :
-                α= 0.5
-
-            else:
-                return α
+def backtracking_line_search(x_i,gradX_i,gFunc,sizeStep,eta=0.5,c=0.0001):
+    g0 = gFunc(x_i)
+    while True:
+        x_trial = x_i - gradX_i * sizeStep
+        g_trial = gFunc(x_trial)
+        if g_trial <= g0 - c *sizeStep * np.dot(gradX_i, gradX_i):
+            break
+        sizeStep *= eta
+    return sizeStep
 
 def line_search_Wolfe(f, grad, x, d, alpha0=1.0, c1=1e-4, c2=0.9):
         alpha = alpha0
         fx = f(x); gdx = grad(x).T @ d
-        while True:
+        for i in range(20):
             # if Armijo condition or curvature condition is not satisfied
             if f(x + alpha*d) > fx + c1*alpha*gdx or grad(x + alpha*d).T @ d < c2*gdx:
                 alpha *= 0.5
-            
+                print("alpha", alpha)
             else:
                 return alpha
+        return alpha
 
 
 
@@ -93,7 +93,7 @@ def ISTA(functionInfo):
     max_iter = functionInfo["max_iter"]
     tol = functionInfo["tolerance"]
 
-    sizeStep = 1 / (L)
+    sizeStep = 1
     logs =[x_i]
     for _ in range(max_iter):
         x_old = x_i.copy()
@@ -130,7 +130,7 @@ def FISTA(functionInfo):
 
 
     y = x_i.copy()
-    sizeStep = 1 / (L)
+    sizeStep = 1
     logs =[x_i]
     t=1
     for k in range(max_iter):
@@ -194,7 +194,7 @@ def gradient_descent(INFOFunction):
     max_iter = INFOFunction["max_iter"]
     tol = INFOFunction["tolerance"]
 
-    stepsize = 1 / (L)
+    stepsize = 1
     logs =[x_i]
     for _ in range(max_iter):
         x_old = x_i.copy()
@@ -223,7 +223,7 @@ def LBGFS(INFOFunction):
     m = INFOFunction["m_choice"]
     n = x_i.shape[0]
 
-    stepsize = 1.0/L 
+    stepsize = 1.0/L
     logs = [x_i.copy()]
     # definition of set S, R, phi
     S = []
@@ -294,7 +294,7 @@ def BGFS(INFOFunction):
     m = INFOFunction["m_choice"]
     n = x_i.shape[0]
 
-    stepsize = 1.0/L 
+    stepsize = 1.0/L
     logs = [x_i.copy()]
     for k in range(1, max_iter):
         #step 0: compute approximation to the inverse of the Hessian matrix
@@ -430,8 +430,9 @@ elif CURRENT_MODE == LEASTSQUARES:
 
 
 
-NB_TRIES = 10
+NB_TRIES = 50
 
+"""
 nb_iterations_ISTA = []
 mse_ISTA = []
 time_ISTA = []
@@ -507,9 +508,36 @@ df= pd.DataFrame({
 # this creates an .xlsx that will open cleanly in Excel
 df.to_excel('performance_results_ratio_subroutine.xlsx', index=False)
 
-
-
+"""
 CURRENT_MODE = RIDGE
+if CURRENT_MODE == LASSO:
+    # LASSO  ||Ax - b||² + λ||x||₁
+    objectiveFunction = lambda x: 0.5 * np.linalg.norm(A_train@x-b_train, 2)**2 + lam1 * np.linalg.norm(x, 1)
+    #gradient of the smooth part
+    gradient = lambda x: A_train.T @ (A_train @ x - b_train)
+    INFO["gradient"] = gradient
+    INFO["g(x)"] = lambda x: 0.5 * np.linalg.norm(A_train@x-b_train, 2)**2
+    INFO["Lipschitz"] = np.linalg.norm(A_train, 2)**2
+    INFO["prox Operator"] = lambda x, stepsize: soft_thresholding(x, lam1 * stepsize)
+    INFO["subgradient_descent"] = lambda x: subgradient(x) * lam1
+elif CURRENT_MODE == RIDGE:
+    # RIDGE  ||Ax - b||² + λ||x||₂²
+    objectiveFunction = lambda x: 0.5 * np.linalg.norm(A_train@x-b_train, 2)**2 + 0.5*lam2 * np.linalg.norm(x, 2)**2
+    gradient = lambda x: A_train.T @ (A_train @ x - b_train) + lam2 * x
+    INFO["gradient"] = gradient
+    INFO["g(x)"] = lambda x: 0.5 * np.linalg.norm(A_train@x-b_train, 2)**2 + 0.5 * lam2 * np.linalg.norm(x, 2)**2
+    INFO["Lipschitz"] = np.linalg.norm(A_train, 2)**2
+    INFO["prox Operator"] = lambda x, stepsize: soft_thresholding(x, 0 * stepsize) / (1 + lam2 * stepsize)
+    INFO["subgradient_descent"] = lambda x: x * 0
+elif CURRENT_MODE == ELASTICNET:
+    # ELASTICNET ||Ax - b||² + λ₁||x||₁ + λ₂||x||₂²
+    objectiveFunction = lambda x: 0.5 * np.linalg.norm(A_train@x-b_train, 2)**2 + lam1 * np.linalg.norm(x, 1) + 0.5*lam2 * np.linalg.norm(x, 2)**2
+    gradient = lambda x: A_train.T @ (A_train @ x - b_train) + lam2 * x
+    INFO["gradient"] = gradient
+    INFO["g(x)"] = lambda x: 0.5 * np.linalg.norm(A_train@x-b_train, 2)**2 + lam2 * np.linalg.norm(x, 2)**2
+    INFO["Lipschitz"] = np.linalg.norm(A_train, 2)**2
+    INFO["prox Operator"] = lambda x, stepsize: soft_thresholding(x, lam1 * stepsize) / (1 + lam2 * stepsize)
+    INFO["subgradient_descent"] = lambda x: subgradient(x) * lam1
 
 
 nb_iterations_ISTA = []
@@ -623,3 +651,84 @@ df.to_excel('performance_results_ratio_subroutine_RIDGE.xlsx', index=False)
    
 
 
+
+
+CURRENT_MODE = RIDGE
+if CURRENT_MODE == LASSO:
+    # LASSO  ||Ax - b||² + λ||x||₁
+    objectiveFunction = lambda x: 0.5 * np.linalg.norm(A_train@x-b_train, 2)**2 + lam1 * np.linalg.norm(x, 1)
+    #gradient of the smooth part
+    gradient = lambda x: A_train.T @ (A_train @ x - b_train)
+    INFO["gradient"] = gradient
+    INFO["g(x)"] = lambda x: 0.5 * np.linalg.norm(A_train@x-b_train, 2)**2
+    INFO["Lipschitz"] = np.linalg.norm(A_train, 2)**2
+    INFO["prox Operator"] = lambda x, stepsize: soft_thresholding(x, lam1 * stepsize)
+    INFO["subgradient_descent"] = lambda x: subgradient(x) * lam1
+elif CURRENT_MODE == RIDGE:
+    # RIDGE  ||Ax - b||² + λ||x||₂²
+    objectiveFunction = lambda x: 0.5 * np.linalg.norm(A_train@x-b_train, 2)**2 + 0.5*lam2 * np.linalg.norm(x, 2)**2
+    gradient = lambda x: A_train.T @ (A_train @ x - b_train) + lam2 * x
+    INFO["gradient"] = gradient
+    INFO["g(x)"] = lambda x: 0.5 * np.linalg.norm(A_train@x-b_train, 2)**2 + 0.5 * lam2 * np.linalg.norm(x, 2)**2
+    INFO["Lipschitz"] = np.linalg.norm(A_train, 2)**2
+    INFO["prox Operator"] = lambda x, stepsize: soft_thresholding(x, 0 * stepsize) / (1 + lam2 * stepsize)
+    INFO["subgradient_descent"] = lambda x: x * 0
+elif CURRENT_MODE == ELASTICNET:
+    # ELASTICNET ||Ax - b||² + λ₁||x||₁ + λ₂||x||₂²
+    objectiveFunction = lambda x: 0.5 * np.linalg.norm(A_train@x-b_train, 2)**2 + lam1 * np.linalg.norm(x, 1) + 0.5*lam2 * np.linalg.norm(x, 2)**2
+    gradient = lambda x: A_train.T @ (A_train @ x - b_train) + lam2 * x
+    INFO["gradient"] = gradient
+    INFO["g(x)"] = lambda x: 0.5 * np.linalg.norm(A_train@x-b_train, 2)**2 + lam2 * np.linalg.norm(x, 2)**2
+    INFO["Lipschitz"] = np.linalg.norm(A_train, 2)**2
+    INFO["prox Operator"] = lambda x, stepsize: soft_thresholding(x, lam1 * stepsize) / (1 + lam2 * stepsize)
+    INFO["subgradient_descent"] = lambda x: subgradient(x) * lam1
+
+elif CURRENT_MODE == LEASTSQUARES:
+    # LEASTSQUARES ||Ax - b||²
+    objectiveFunction = lambda x: 0.5 * np.linalg.norm(A_train@x-b_train, 2)**2
+    INFO["gradient"] = lambda x: A_train.T @ (A_train @ x - b_train)
+    INFO["g(x)"] = lambda x: 0.5 * np.linalg.norm(A_train@x-b_train, 2)**2
+    INFO["Lipschitz"] = np.linalg.norm(A_train, 2)**2
+    INFO["prox Operator"] = lambda x, lam: x
+    INFO["subgradient_descent"] = lambda x: x * 0
+
+A_train, b_train,b_mean, b_std = load_and_preprocess_data(csv_path="synthetic_datasets/synthetic_data_1000_features.csv",targetColumn = 'target',train_size=train_size, random_state=random_state)
+nb_features = A_train.shape[1]
+
+nb_iterations_LBGFS = []
+time_LBGFS = []
+
+nb_iterations_BGFS = []
+time_BGFS = []
+
+for i in range(NB_TRIES):
+    x_0 = np.random.randn(nb_features)
+    INFO["x_0"] = x_0
+    x_LBGFS, logs_LBGFS, timeSpent, timeSpentBacktracking = LBGFS(INFO)
+    nb_iterations_LBGFS.append(len(logs_LBGFS))
+    time_LBGFS.append(timeSpent)
+
+    
+    #######################################################
+    x_BGFS, logs_BGFS, timeSpent, timeSpentBacktracking = BGFS(INFO)
+    nb_iterations_BGFS.append(len(logs_BGFS))
+    time_BGFS.append(timeSpent)
+    print("iteration", i)
+    print("")
+
+#open csv file to store min max average time store in A1 ISTA, A2 FISTA, A3 SGD   in B put min time , in C put max time, in D put average time
+log_base = 2
+df = pd.DataFrame({
+    'Method': ['LBGFS', 'BGFS'],
+    'Min Time (s)': [np.min(time_LBGFS), np.min(time_BGFS)],
+    'Max Time (s)': [np.max(time_LBGFS), np.max(time_BGFS)],
+    'Average Time (s)': [np.mean(time_LBGFS), np.mean(time_BGFS)],
+    'Standard Deviation Time (s)': [np.std(time_LBGFS), np.std(time_BGFS)],
+    'Min Iterations': [np.min(nb_iterations_LBGFS), np.min(nb_iterations_BGFS)],
+    'Max Iterations': [np.max(nb_iterations_LBGFS), np.max(nb_iterations_BGFS)],
+    'Average Iterations': [np.mean(nb_iterations_LBGFS), np.mean(nb_iterations_BGFS)],
+    'Standard Deviation Iterations': [np.std(nb_iterations_LBGFS), np.std(nb_iterations_BGFS)],
+})
+# Save the DataFrame to a CSV file
+# this creates an .xlsx that will open cleanly in Excel
+df.to_excel('performance_results_synthetic_data_1000_features.xlsx', index=False)
