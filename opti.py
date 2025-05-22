@@ -30,21 +30,20 @@ LEASTSQUARES=3
 
 # Initialization
 max_iter = 4000
-tolerance = 1e-9
+tolerance = 1e-6
 
 
 nb_features = A_train.shape[1]
 nb_samples = A_train.shape[0]
 lambdaMax = np.max(np.abs(A_train.T @ b_train)) / nb_samples
 
-lam1 = 0.4
-lam2 = 0.1
+lam1 = 0.0001 
+lam2 = 0.0000001
 
 lambdaString = f"lambda1_{lam1}_lambda2_{lam2}"
 m = 10 # Number of past iterations to consider in L-BFGS
 
-CURRENT_MODE = LASSO # Choose between LASSO, ELASTICNET, RIDGE
-
+CURRENT_MODE = RIDGE# Choose between LASSO, ELASTICNET, RIDGE
 
 
 def soft_thresholding(x, tau):
@@ -406,14 +405,21 @@ mse_Per_iter_sgd = [objectiveFunction(x) for x in logs_sgd]
 
 
 plt.figure(figsize=(12, 6))
-plt.plot(range(1, len(mse_Per_iter_sgd) + 1),mse_Per_iter_sgd, label="Subgradient Descent")
-plt.plot( range(1, len(mse_Per_iter_ista) + 1),mse_Per_iter_ista, label="ISTA")
-plt.plot( range(1, len(mse_Per_iter_fista) + 1),mse_Per_iter_fista, label="FISTA")
+plt.plot(range(1, len(mse_Per_iter_sgd) + 1),mse_Per_iter_sgd, label="Subgradient Descent", color="blue")
+plt.plot( len(mse_Per_iter_sgd) + 1, mse_Per_iter_sgd[-1], '|', color="blue", markersize=10)
+plt.plot( range(1, len(mse_Per_iter_ista) + 1),mse_Per_iter_ista, label="ISTA", color="orange")
+plt.plot( len(mse_Per_iter_ista) + 1, mse_Per_iter_ista[-1], '|', color="orange", markersize=10)
+
+plt.plot( range(1, len(mse_Per_iter_fista) + 1),mse_Per_iter_fista, label="FISTA", color="red")
+plt.plot( len(mse_Per_iter_fista) + 1, mse_Per_iter_fista[-1], '|', color="red", markersize=10)
 
 if( CURRENT_MODE == LEASTSQUARES) or (CURRENT_MODE == RIDGE):
-    plt.plot( range(1, len(mse_Per_iter_lbfgs) + 1),mse_Per_iter_lbfgs, label="LBFGS")
-    plt.plot( range(1, len(mse_Per_iter_gd) + 1),mse_Per_iter_gd, label="GD")
-    plt.plot( range(1, len(mse_Per_iter_bfgs) + 1),mse_Per_iter_bfgs, label="BFGS")
+    plt.plot( range(1, len(mse_Per_iter_lbfgs) + 1),mse_Per_iter_lbfgs, label="LBFGS", color="green")
+    plt.plot( len(mse_Per_iter_lbfgs) + 1, mse_Per_iter_lbfgs[-1], '|', color="green", markersize=10)
+    plt.plot( range(1, len(mse_Per_iter_gd) + 1),mse_Per_iter_gd, label="GD", color="purple")
+    plt.plot( len(mse_Per_iter_gd) + 1, mse_Per_iter_gd[-1], '|', color="purple", markersize=10)
+    plt.plot( range(1, len(mse_Per_iter_bfgs) + 1),mse_Per_iter_bfgs, label="BFGS", color="brown")
+    plt.plot( len(mse_Per_iter_bfgs) + 1, mse_Per_iter_bfgs[-1], '|', color="brown", markersize=10)
 
 plt.legend()
 plt.title("MSE vs Iterations")
