@@ -91,7 +91,7 @@ def ISTA(functionInfo):
     max_iter = functionInfo["max_iter"]
     tol = functionInfo["tolerance"]
 
-    sizeStep = 1 / (L)
+    sizeStep = 1 
     logs =[x_i]
     for _ in range(max_iter):
         x_old = x_i.copy()
@@ -116,7 +116,7 @@ def FISTA(functionInfo):
 
 
     y = x_i.copy()
-    sizeStep = 1 / (L)
+    sizeStep = 1
     print("sizeStep",sizeStep)
     logs =[x_i]
     t=1
@@ -145,7 +145,7 @@ def subgradient_descent(INFOFunction):
     tol = INFOFunction["tolerance"]
     subgradientX_i = INFOFunction["subgradient_descent"]	
 
-    stepsize = 1 / (L)
+    stepsize = 1/L
     logs =[x_i]
     for k in range(1, max_iter+1):
         x_old = x_i.copy()
@@ -170,7 +170,7 @@ def gradient_descent(INFOFunction):
     max_iter = INFOFunction["max_iter"]
     tol = INFOFunction["tolerance"]
 
-    stepsize = 1 / (L)
+    stepsize = 1 
     logs =[x_i]
     for _ in range(max_iter):
         x_old = x_i.copy()
@@ -182,7 +182,7 @@ def gradient_descent(INFOFunction):
             break
     return x_i,logs
 
-def LBGFS(INFOFunction):
+def LBFGS(INFOFunction):
     grad = INFOFunction["gradient"]
     g = INFOFunction["g(x)"]
     x_i = INFOFunction["x_0"].copy()
@@ -193,7 +193,7 @@ def LBGFS(INFOFunction):
     m = INFOFunction["m_choice"]
     n = x_i.shape[0]
 
-    stepsize = 1.0/L 
+    stepsize = 1.0
     logs = [x_i.copy()]
     # definition of set S, R, phi
     S = []
@@ -247,7 +247,7 @@ def LBGFS(INFOFunction):
     return x_i, logs
 
 
-def BGFS(INFOFunction):
+def BFGS(INFOFunction):
     grad = INFOFunction["gradient"]
     g = INFOFunction["g(x)"]
     x_i = INFOFunction["x_0"].copy()
@@ -258,7 +258,7 @@ def BGFS(INFOFunction):
     m = INFOFunction["m_choice"]
     n = x_i.shape[0]
 
-    stepsize = 1.0/L 
+    stepsize = 1.0 
     logs = [x_i.copy()]
     for k in range(1, max_iter):
         #step 0: compute approximation to the inverse of the Hessian matrix
@@ -377,14 +377,14 @@ if CURRENT_MODE== LEASTSQUARES or CURRENT_MODE == RIDGE:
     print("GD converged in", len(logs_gd), "iterations")
     mse_Per_iter_gd = [objectiveFunction(x) for x in logs_gd]
 
-    x_hat_lbgfs, logs_lbgfs = LBGFS(INFO)
-    print("LBGFS converged in", len(logs_lbgfs), "iterations")
-    mse_Per_iter_lbgfs = [objectiveFunction(x) for x in logs_lbgfs]  
+    x_hat_lbfgs, logs_lbfgs = LBFGS(INFO)
+    print("LBFGS converged in", len(logs_lbfgs), "iterations")
+    mse_Per_iter_lbfgs = [objectiveFunction(x) for x in logs_lbfgs]  
 
 
-    x_hat_bgfs, logs_bgfs = BGFS(INFO)
-    print("BGFS converged in", len(logs_bgfs), "iterations")
-    mse_Per_iter_bgfs = [objectiveFunction(x) for x in logs_bgfs]   
+    x_hat_bfgs, logs_bfgs = BFGS(INFO)
+    print("BFGS converged in", len(logs_bfgs), "iterations")
+    mse_Per_iter_bfgs = [objectiveFunction(x) for x in logs_bfgs]   
 
 
 
@@ -406,9 +406,9 @@ plt.plot( range(1, len(mse_Per_iter_ista) + 1),mse_Per_iter_ista, label="ISTA")
 plt.plot( range(1, len(mse_Per_iter_fista) + 1),mse_Per_iter_fista, label="FISTA")
 
 if( CURRENT_MODE == LEASTSQUARES) or (CURRENT_MODE == RIDGE):
-    plt.plot( range(1, len(mse_Per_iter_lbgfs) + 1),mse_Per_iter_lbgfs, label="LBGFS")
+    plt.plot( range(1, len(mse_Per_iter_lbfgs) + 1),mse_Per_iter_lbfgs, label="LBFGS")
     plt.plot( range(1, len(mse_Per_iter_gd) + 1),mse_Per_iter_gd, label="GD")
-    plt.plot( range(1, len(mse_Per_iter_bgfs) + 1),mse_Per_iter_bgfs, label="BGFS")
+    plt.plot( range(1, len(mse_Per_iter_bfgs) + 1),mse_Per_iter_bfgs, label="BFGS")
 
 plt.legend()
 plt.title("MSE vs Iterations")
@@ -428,7 +428,7 @@ plt.savefig("i.png")
 
 
 mse_test_ista = mean_squared_error(b_train, A_train @ x_hat_ista)
-print("==> Results ofISTA")
+print("==> Results of ISTA")
 print(f"MSE : {mse_test_ista:.4f}")
 
 mse_test_fista = mean_squared_error(b_train, A_train @ x_hat_fista)
@@ -446,13 +446,13 @@ if( CURRENT_MODE == LEASTSQUARES) or (CURRENT_MODE == RIDGE):
     print("==> Results of Gradient Descent")
     print(f"MSE : {mse_test_gd:.4f}")
 
-    mse_test_bgfs = mean_squared_error(b_train, A_train @ x_hat_bgfs)
-    print("==> Results of BGFS")
-    print(f"MSE : {mse_test_bgfs:.4f}")
+    mse_test_bfgs = mean_squared_error(b_train, A_train @ x_hat_bfgs)
+    print("==> Results of BFGS")
+    print(f"MSE : {mse_test_bfgs:.4f}")
 
-    mse_test_lbgfs = mean_squared_error(b_train, A_train @ x_hat_lbgfs)
-    print("==> Results of LBGFS")
-    print(f"MSE : {mse_test_lbgfs:.4f}")
+    mse_test_lbfgs = mean_squared_error(b_train, A_train @ x_hat_lbfgs)
+    print("==> Results of LBFGS")
+    print(f"MSE : {mse_test_lbfgs:.4f}")
 
 
 
@@ -476,7 +476,7 @@ elif CURRENT_MODE == LEASTSQUARES:
     # Least Squares sklearn
     model = LinearRegression(fit_intercept=False)
     model.fit(A_train, b_train)
-    mse_test_lbgfs = mean_squared_error(b_train, A_train @ x_hat_lbgfs)
+    mse_test_lbfgs = mean_squared_error(b_train, A_train @ x_hat_lbfgs)
     
 
 
@@ -491,9 +491,9 @@ print(f"MSE sklearn : {mse_sklearn:.4f}")
 print(f"MSE ISTA : {mse_test_ista:.4f}")
 print(f"MSE FISTA : {mse_test_fista:.4f}")
 if CURRENT_MODE == LEASTSQUARES or CURRENT_MODE == RIDGE:
-    print(f"MSE BGFS : {mse_test_gd:.4f}")
-    print(f"MSE LBGFS : {mse_test_bgfs:.4f}")
-    print(f"MSE LBGFS : {mse_test_lbgfs:.4f}")
+    print(f"MSE BFGS : {mse_test_gd:.4f}")
+    print(f"MSE LBFGS : {mse_test_bfgs:.4f}")
+    print(f"MSE LBFGS : {mse_test_lbfgs:.4f}")
 print(f"Difference ISTA vs sklearn : {mse_test_ista - mse_sklearn}")
 print(f"Difference FISTA vs sklearn : {mse_test_fista - mse_sklearn}")
 print(f"Difference Subgradient vs sklearn : {mse_subgradient - mse_sklearn}")
