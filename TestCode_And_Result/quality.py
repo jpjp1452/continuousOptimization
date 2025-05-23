@@ -29,7 +29,7 @@ ELASTICNET=2
 LEASTSQUARES=3
 
 # Initialization
-max_iter = 10000
+max_iter = 40000
 tolerance = 1e-200
 
 
