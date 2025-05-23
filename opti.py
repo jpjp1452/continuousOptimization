@@ -30,15 +30,15 @@ LEASTSQUARES=3
 
 # Initialization
 max_iter = 4000
-tolerance = 1e-6
+tolerance = 1e-4
 
 
 nb_features = A_train.shape[1]
 nb_samples = A_train.shape[0]
 lambdaMax = np.max(np.abs(A_train.T @ b_train)) / nb_samples
 
-lam1 = 0.0001 
-lam2 = 0.0000001
+lam1 = 8 
+lam2 = 2
 
 lambdaString = f"lambda1_{lam1}_lambda2_{lam2}"
 m = 10 # Number of past iterations to consider in L-BFGS
@@ -429,13 +429,13 @@ plt.yscale('log')
 plt.xscale('log',base=10)
 plt.grid()
 if CURRENT_MODE == LASSO:
-    plt.savefig(f"lasso_{NAME_DATASET}_{lambdaString}.png")
+    plt.savefig(f"lasso_{NAME_DATASET}_{lambdaString}_{tolerance}.png")
 elif CURRENT_MODE == ELASTICNET:
-    plt.savefig(f"elasticnet_{NAME_DATASET}_{lambdaString}.png")
+    plt.savefig(f"elasticnet_{NAME_DATASET}_{lambdaString}_{tolerance}.png")
 elif CURRENT_MODE == RIDGE:
-    plt.savefig(f"ridge_{NAME_DATASET}_{lambdaString}.png")
+    plt.savefig(f"ridge_{NAME_DATASET}_{lambdaString}_{tolerance}.png")
 elif CURRENT_MODE == LEASTSQUARES:
-    plt.savefig(f"leastSquares_{NAME_DATASET}_{lambdaString}.png")
+    plt.savefig(f"leastSquares_{NAME_DATASET}_{lambdaString}_{tolerance}.png")
 plt.show()
 
 

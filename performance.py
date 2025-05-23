@@ -429,8 +429,9 @@ elif CURRENT_MODE == LEASTSQUARES:
 
 
 
-NB_TRIES = 10
+NB_TRIES = 5
 
+"""
 nb_iterations_ISTA = []
 mse_ISTA = []
 time_ISTA = []
@@ -492,9 +493,9 @@ df = pd.DataFrame({
 
 # Save the DataFrame to a CSV file
 # this creates an .xlsx that will open cleanly in Excel
-df.to_excel('performance_results.xlsx', index=False)
+df.to_excel('performance_resultsLASSO.xlsx', index=False)
 
-
+exit(0)
 #ratio subroutines ista fista
 
 
@@ -506,7 +507,7 @@ df= pd.DataFrame({
 # Save the DataFrame to a CSV file
 # this creates an .xlsx that will open cleanly in Excel
 df.to_excel('performance_results_ratio_subroutine.xlsx', index=False)
-
+"""
 CURRENT_MODE = RIDGE
 if CURRENT_MODE == LASSO:
     # LASSO  ||Ax - b||² + λ||x||₁
@@ -618,15 +619,15 @@ for i in range(NB_TRIES):
 #open csv file to store min max average time store in A1 ISTA, A2 FISTA, A3 SGD   in B put min time , in C put max time, in D put average time
 log_base = 2
 df = pd.DataFrame({
-    'Method': ['ISTA', 'FISTA', 'SGD', 'LBGFS', 'BGFS'],
-    'Min Time (s)': [np.min(time_ISTA), np.min(time_FISTA), np.min(time_SGD), np.min(time_LBGFS), np.min(time_BGFS)],
-    'Max Time (s)': [np.max(time_ISTA), np.max(time_FISTA), np.max(time_SGD), np.max(time_LBGFS), np.max(time_BGFS)],
-    'Average Time (s)': [np.mean(time_ISTA), np.mean(time_FISTA), np.mean(time_SGD), np.mean(time_LBGFS), np.mean(time_BGFS)],
-    'Standard Deviation Time (s)': [np.std(time_ISTA), np.std(time_FISTA), np.std(time_SGD), np.std(time_LBGFS), np.std(time_BGFS)],
-    'Min Iterations': [np.min(nb_iterations_ISTA), np.min(nb_iterations_FISTA), np.min(nb_iterations_SGD), np.min(nb_iterations_LBGFS), np.min(nb_iterations_BGFS)],
-    'Max Iterations': [np.max(nb_iterations_ISTA), np.max(nb_iterations_FISTA), np.max(nb_iterations_SGD), np.max(nb_iterations_LBGFS), np.max(nb_iterations_BGFS)],
-    'Average Iterations': [np.mean(nb_iterations_ISTA), np.mean(nb_iterations_FISTA), np.mean(nb_iterations_SGD), np.mean(nb_iterations_LBGFS), np.mean(nb_iterations_BGFS)],
-    'Standard Deviation Iterations': [np.std(nb_iterations_ISTA), np.std(nb_iterations_FISTA), np.std(nb_iterations_SGD), np.std(nb_iterations_LBGFS),np.std(nb_iterations_BGFS)],
+    'Method': ['ISTA', 'FISTA', 'SGD', 'GD', 'LBGFS', 'BGFS'],
+    'Min Time (s)': [np.min(time_ISTA), np.min(time_FISTA), np.min(time_SGD), np.min(time_GD), np.min(time_LBGFS), np.min(time_BGFS)],
+    'Max Time (s)': [np.max(time_ISTA), np.max(time_FISTA), np.max(time_SGD), np.max(time_GD), np.max(time_LBGFS), np.max(time_BGFS)],
+    'Average Time (s)': [np.mean(time_ISTA), np.mean(time_FISTA), np.mean(time_SGD), np.mean(time_GD), np.mean(time_LBGFS), np.mean(time_BGFS)],
+    'Standard Deviation Time (s)': [np.std(time_ISTA), np.std(time_FISTA), np.std(time_SGD), np.std(time_GD), np.std(time_LBGFS), np.std(time_BGFS)],
+    'Min Iterations': [np.min(nb_iterations_ISTA), np.min(nb_iterations_FISTA), np.min(nb_iterations_SGD), np.min(nb_iterations_GD), np.min(nb_iterations_LBGFS), np.min(nb_iterations_BGFS)],
+    'Max Iterations': [np.max(nb_iterations_ISTA), np.max(nb_iterations_FISTA), np.max(nb_iterations_SGD), np.max(nb_iterations_GD), np.max(nb_iterations_LBGFS), np.max(nb_iterations_BGFS)],
+    'Average Iterations': [np.mean(nb_iterations_ISTA), np.mean(nb_iterations_FISTA), np.mean(nb_iterations_SGD), np.mean(nb_iterations_GD), np.mean(nb_iterations_LBGFS), np.mean(nb_iterations_BGFS)],
+    'Standard Deviation Iterations': [np.std(nb_iterations_ISTA), np.std(nb_iterations_FISTA), np.std(nb_iterations_SGD), np.std(nb_iterations_GD), np.std(nb_iterations_LBGFS), np.std(nb_iterations_BGFS)],
 })
 
 # Save the DataFrame to a CSV file
@@ -642,7 +643,7 @@ df= pd.DataFrame({
 
 # Save the DataFrame to a CSV file
 # this creates an .xlsx that will open cleanly in Excel
-df.to_excel('performance_results_ratio_subroutine_RIDGE.xlsx', index=False)
+df.to_excel('performance_results_ratio_subroutine_LEASTSQUARE.xlsx', index=False)
 
 
    
@@ -689,6 +690,7 @@ elif CURRENT_MODE == LEASTSQUARES:
     INFO["prox Operator"] = lambda x, lam: x
     INFO["subgradient_descent"] = lambda x: x * 0
 
+exit(0)
 A_train, b_train,b_mean, b_std = load_and_preprocess_data(csv_path="synthetic_datasets/synthetic_data_1000_features.csv",targetColumn = 'target',train_size=train_size, random_state=random_state)
 nb_features = A_train.shape[1]
 x_0 = np.zeros(nb_features)
@@ -698,7 +700,6 @@ time_LBGFS = []
 
 nb_iterations_BGFS = []
 time_BGFS = []
-
 for i in range(NB_TRIES):
 
     x_LBGFS, logs_LBGFS, timeSpent, timeSpentBacktracking = LBGFS(INFO)

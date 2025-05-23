@@ -14,6 +14,8 @@ noise_std = 0.1  # bruit ajouté
 for n_features in feature_ranges:
     # Génération aléatoire des données
     X = np.random.randn(n_samples, n_features)
+    print(X)
+    exit(0)
     w = np.random.randn(n_features, 1)
     noise = np.random.randn(n_samples, 1) * noise_std
     y = X @ w + noise  # produit scalaire + bruit
