@@ -359,7 +359,6 @@ INFO_Func= {"gradient": None,"g(x)": None, "Lipschitz": None, "prox Operator": N
 if CURRENT_MODE == LASSO:
     # LASSO  ||Ax - b||² + λ||x||₁
     objectiveFunction = lambda x: 0.5 * np.linalg.norm(A_train@x-b_train, 2)**2 + lam1 * np.linalg.norm(x, 1)
-    #gradient of the smooth part
     gradient = lambda x: A_train.T @ (A_train @ x - b_train)
     INFO_Func["gradient"] = gradient
     INFO_Func["g(x)"] = lambda x: 0.5 * np.linalg.norm(A_train@x-b_train, 2)**2
@@ -411,7 +410,7 @@ INFO_Func["tolerance"] = tolerance
 
 
 
-
+#Run each algorithms
 x_hat_ista, logs_ista = ISTA(INFO_Func)
 mse_Per_iter_ista = [objectiveFunction(x) for x in logs_ista]
 mse__ista = mean_squared_error(b_train, A_train @ x_hat_ista)
@@ -456,7 +455,7 @@ if CURRENT_MODE== LEASTSQUARES or CURRENT_MODE == RIDGE:
 
 
 
-
+#plot the progress of each algorithm over the iteration
 plt.figure(figsize=(12, 6))
 plt.plot(range(1, len(mse_Per_iter_sgd) + 1),mse_Per_iter_sgd, label="Subgradient Descent", color="blue")
 plt.plot( len(mse_Per_iter_sgd) + 1, mse_Per_iter_sgd[-1], '|', color="blue", markersize=10)
@@ -524,7 +523,7 @@ elif CURRENT_MODE == LEASTSQUARES:
 mse_sklearn = mean_squared_error(b_train, model.predict(A_train))
 
 
-
+#print the results
 print("==> Results comparison")
 print(f"MSE sklearn : {mse_sklearn}")
 print(f"MSE ISTA : {mse__ista}")
